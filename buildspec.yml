@@ -1,0 +1,34 @@
+version: 0.2
+
+phases:
+  install:
+    commands:
+      - echo Entered the install phase...
+      # An comment to force a build
+      # Install all dependencies (including dependencies for running tests)
+      - npm install
+    finally:
+      - echo This always runs even if the update or install command fails 
+
+  build:
+    commands:
+      # Use AWS SAM to package the application by using AWS CloudFormation
+      # Use AWS SAM to package the application by using AWS CloudFormation
+      - export S3_BUCKET=the-daly-nugget-sam-service-staging-artifacts
+      - aws cloudformation package --template-file the-daly-nugget-sam-service-staging-template.yml --s3-bucket $S3_BUCKET --output-template-file the-daly-nugget-sam-service-staging-template-export.yml
+    finally:
+      - echo This always runs even if the install command fails
+
+  post_build:
+    commands:
+      - echo Entered the post_build phase...
+      - echo Build completed on `date`
+
+    finally:
+      - echo This always runs even if the install command fails
+
+artifacts:
+  type: zip
+  files:
+    - the-daly-nugget-sam-service-staging-template.yml
+    - the-daly-nugget-sam-service-staging-template-export.yml

@@ -1,0 +1,38 @@
+{
+  "name": "the-daly-nugget",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/faserrao/TheDalyNugget.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "engines": {
+    "node": "8.10",
+    "serverless": "1.62.0"
+  },
+  "bugs": {
+    "url": "https://github.com/faserrao/TheDalyNugget/issues"
+  },
+  "homepage": "https://github.com/faserrao/TheDalyNugget#readme",
+  "devDependencies": {
+    "csv-parse": "^4.8.8",
+    "eslint": "^5.15.0",
+    "eslint-plugin-react": "^7.12.4",
+    "jsctags": "git+https://github.com/ramitos/jsctags.git",
+    "serverless-sam": "^0.2.0"
+  },
+  "dependencies": {
+    "async": "^3.2.0",
+    "aws-sdk": "^2.643.0",
+    "mailparser": "^2.7.1",
+    "toml": "^3.0.0",
+    "uuid": "^3.4.0",
+    "uuidv1": "^1.6.14"
+  }
+}

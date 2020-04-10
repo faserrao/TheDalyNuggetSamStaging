@@ -1,0 +1,2136 @@
+Globals:
+  Function:
+    MemorySize: 128
+    Runtime: nodejs10.x
+    Timeout: 180
+    Environment:
+      Variables:
+        DN_AWS_REGION: us-east-1
+        DN_URL: 'http://thedalynugget.com'
+        NUGGET_OF_THE_DAY_TABLE: nugget-of-the-day-sam-staging
+        NUGGET_BASE_TABLE: nugget-base-sam-staging
+        NUGGET_SUBSCRIBER_TABLE: nugget-subscriber-sam-staging
+        NUGGETEER_TABLE: nuggeteer-sam-staging
+        NUGGET_HISTORY_TABLE: nugget-history-sam-staging
+        DN_BLESSED_EMAIL_ADDRESS: thenuggrev.staging@gmail.com
+        DN_REVS_EMAIL_ADDRESS: thenuggrev@gmail.com
+        DN_NUGGET_EMAIL_SUBJECT: Your Daily Nugget From The Rev
+        IS_LOCAL: 'false'
+        DN_SES_CUSTOM_VERIFICATION_EMAIL_TEMPLATE_NAME: the-daly-nugget-sam-staging-verification-template
+        DN_S3_STACK_OUTPUT_BUCKET: the-daly-nugget-sam-service-staging-stack-outputs
+        DN_S3_STACK_OUTPUT_FILE_NAME: stack-output
+        DN_LOCAL_REGION: localhost
+        DN_LOCAL_DDB_ENDPOINT: 'http://localhost:8000'
+
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Description: 'SAM template for Serverless framework service: '
+
+Parameters: 
+  StageParameter: 
+    Type: String
+    Default: staging
+    AllowedValues: 
+      - test
+      - dev
+      - prod
+      - staging
+
+Mappings:
+  VarMap:
+    staging:
+      DNSERVICENAME:                      the-daly-nugget-sam-service
+      DNDOMAIN:                           thedalynugget.com
+      DNSUBDOMAIN:                        staging.thedalynugget.com
+      DNREVSEMAILADDRESS:                 thenuggrev@gmail.com
+      NUGGETOFTHEDAYTABLE:                nugget-of-the-day-sam-staging
+      NUGGETBASETABLE:                    nugget-base-sam-staging
+      NUGGETSUBSCRIBERTABLE:              nugget-subscriber-sam-staging
+      NUGGETEERTABLE:                     nuggeteer-sam-staging
+      NUGGETHISTORYTABLE:                 nugget-history-sam-staging
+      DNSESEMAILRECEIPTRULESETNAME:       the-daly-nugget-sam-email-received-rule-set
+      DNHOSTEDZONENAME:                   thedalynugget.com.
+      DNURL:                              http://thedalynugget.com
+      DNS3NODBUCKET:                      the-daly-nugget-sam-service-staging-emails
+      DNS3STACKOUTPUTBUCKET:              the-daly-nugget-sam-service-staging-stack-outputs
+      DNS3STACKOUTPUTFILENAME:            stack-output
+      DNSESEMAILRECEIPTRULENAME:          the-daly-nugget-sam-staging-receipt-rule
+      DNSESEMAILRECEIPTRULEEMAILADDRESS:  faserrao@thedalynugget.com
+
+  RegionMap: 
+    us-east-1:
+      HZID:     Z3AQBSTGFYJSTF
+      DN:       s3-website-us-east-1.amazonaws.com
+      SMTPIN:  inbound-smtp.us-east-1.amazonaws.com
+    us-west-1:
+      HZID:     Z3AQBSTGFYJSTF
+      DN:       s3-website-us-east-1.amazonaws.com
+      SMTPIN:  inbound-smtp.us-east-1.amazonaws.com
+    eu-west-1:
+      HZID:     Z3AQBSTGFYJSTF
+      DN:       s3-website-us-east-1.amazonaws.com
+      SMTPIN:  inbound-smtp.us-east-1.amazonaws.com
+    ap-northeast-1:
+      HZID:     Z3AQBSTGFYJSTF
+      DN:       s3-website-us-east-1.amazonaws.com
+      SMTPIN:  inbound-smtp.us-east-1.amazonaws.com
+    ap-southeast-1:
+      HZID:     Z3AQBSTGFYJSTF
+      DN:       s3-website-us-east-1.amazonaws.com
+      SMTPIN:  inbound-smtp.us-east-1.amazonaws.com
+
+Resources:
+  NuggetOfTheDayDynamoDbTable:
+    Type: 'AWS::DynamoDB::Table'
+    DeletionPolicy: Delete
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: nodKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: nodKey
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      TableName: !FindInMap [VarMap, staging, NUGGETOFTHEDAYTABLE]
+
+  NuggetHistoryDynamoDbTable:
+    Type: 'AWS::DynamoDB::Table'
+    DeletionPolicy: Delete
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: nhKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: nhKey
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      TableName: !FindInMap [VarMap, staging, NUGGETHISTORYTABLE]
+
+  NuggetBaseDynamoDbTable:
+    Type: 'AWS::DynamoDB::Table'
+    DeletionPolicy: Delete
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: topic
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+        - AttributeName: topic
+          KeyType: RANGE
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      TableName: !FindInMap [VarMap, staging, NUGGETBASETABLE]
+
+  NuggetSubscriberDynamoDbTable:
+    Type: 'AWS::DynamoDB::Table'
+    DeletionPolicy: Delete
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: email
+          AttributeType: S
+        - AttributeName: verificationStatus
+          AttributeType: S
+      KeySchema:
+        - AttributeName: email
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      TableName: !FindInMap [VarMap, staging, NUGGETSUBSCRIBERTABLE]
+      GlobalSecondaryIndexes:
+        - IndexName: nuggetSubscriberGSI
+          KeySchema:
+            - AttributeName: verificationStatus
+              KeyType: HASH
+          Projection:
+            NonKeyAttributes:
+              - email
+            ProjectionType: INCLUDE
+          ProvisionedThroughput:
+            ReadCapacityUnits: '1'
+            WriteCapacityUnits: '1'
+
+  NuggeteerDynamoDbTable:
+    Type: 'AWS::DynamoDB::Table'
+    DeletionPolicy: Delete
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: email
+          AttributeType: S
+        - AttributeName: nuggetDeliveryFrequency
+          AttributeType: S
+      KeySchema:
+        - AttributeName: email
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      TableName: !FindInMap [VarMap, staging, NUGGETEERTABLE]
+      GlobalSecondaryIndexes:
+        - IndexName: nuggetDeliveryGSI
+          KeySchema:
+            - AttributeName: nuggetDeliveryFrequency
+              KeyType: HASH
+            - AttributeName: email
+              KeyType: RANGE
+          Projection:
+            NonKeyAttributes:
+              - nuggetDeliveryMethod
+              - phone
+            ProjectionType: INCLUDE
+          ProvisionedThroughput:
+            ReadCapacityUnits: '1'
+            WriteCapacityUnits: '1'
+
+  AttachmentsBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins:
+              - '*'
+            AllowedHeaders:
+              - '*'
+            AllowedMethods:
+              - GET
+              - PUT
+              - POST
+              - DELETE
+              - HEAD
+            MaxAge: 3000
+
+  TheDailyNuggetStackOutputsBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !FindInMap [VarMap, staging, DNS3STACKOUTPUTBUCKET]
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins:
+              - '*'
+            AllowedHeaders:
+              - '*'
+            AllowedMethods:
+              - GET
+              - PUT
+              - POST
+              - DELETE
+              - HEAD
+            MaxAge: 3000
+
+  TheDailyNuggetEmailBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !FindInMap [VarMap, staging, DNS3NODBUCKET]
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins:
+              - '*'
+            AllowedHeaders:
+              - '*'
+            AllowedMethods:
+              - GET
+              - PUT
+              - POST
+              - DELETE
+              - HEAD
+            MaxAge: 3000
+
+  TheDailyNuggetEmailBucketPermissions:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket:
+        Ref: TheDailyNuggetEmailBucket
+      PolicyDocument:
+        Statement:
+          - Principal:
+              Service: ses.amazonaws.com
+            Action:
+              - 's3:PutObject'
+            Effect: Allow
+            Sid: AllowSESPuts
+            Resource:
+              'Fn::Join':
+                - ''
+                - - 'arn:aws:s3:::'
+                  - Ref: TheDailyNuggetEmailBucket
+                  - /*
+            Condition:
+              StringEquals:
+                'aws:Referer':
+                  Ref: 'AWS::AccountId'
+
+  zonethedailynuggetnet:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: !FindInMap [VarMap, staging, DNHOSTEDZONENAME]
+
+  dnsthedailynuggetnet:
+    Type: AWS::Route53::RecordSetGroup
+    Properties:
+      HostedZoneId:
+        Ref: zonethedailynuggetnet
+      RecordSets:
+        - Name: !FindInMap [VarMap, staging, DNHOSTEDZONENAME]
+          Type: MX
+          TTL: '300'
+          ResourceRecords:
+            - !Join
+              - "" 
+              - [10, " ", !FindInMap [RegionMap, !Ref 'AWS::Region', SMTPIN]]
+
+# - !FindInMap [RegionMap, !Ref 'AWS::Region', SMTPIN]
+
+  dnsdevthedailynuggetnet:
+    Type: 'AWS::Route53::RecordSetGroup'
+    Properties:
+      HostedZoneId:
+        Ref: zonethedailynuggetnet
+      RecordSets:
+        - Name: !FindInMap [VarMap, staging, DNSUBDOMAIN]
+          Type: A
+          AliasTarget:
+            HostedZoneId: !FindInMap [RegionMap, !Ref "AWS::Region", HZID]
+            DNSName: !FindInMap [RegionMap, !Ref "AWS::Region", DN]
+
+  CfnSESResources1:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3.amazonaws.com/the-daly-nugget-sam-service-staging-custom-cfn-resources/Briex/cfn-resource-provider.yaml
+      Parameters:
+        LambdaCodeS3Bucket: the-daly-nugget-sam-service-staging-custom-cfn-resources
+        LambdaCodeS3Key: Briex/cfn-ses-provider-0.6.4.zip
+
+  DomainIdentity:
+    Type: Custom::DomainIdentity
+    DependsOn:
+    - CfnSESResources1
+    Properties:
+      Domain: !FindInMap [VarMap, staging, DNHOSTEDZONENAME]
+      Region: !Ref 'AWS::Region'
+      ServiceToken: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:binxio-cfn-ses-provider'
+
+  dnsamazonsesthedailynuggetnet:
+    Type: AWS::Route53::RecordSetGroup
+    Properties:
+      HostedZoneId: !Ref 'zonethedailynuggetnet'
+      RecordSets: !GetAtt 'DomainIdentity.RecordSets'
+
+  EmailReceivedRuleSet:
+    Type: 'AWS::SES::ReceiptRuleSet'
+    DependsOn:
+    - TheDailyNuggetEmailBucket
+    - TheDailyNuggetEmailBucketPermissions
+    Properties:
+      RuleSetName: !FindInMap [VarMap, staging, DNSESEMAILRECEIPTRULESETNAME]
+
+  EmailReceivedRule:
+    Type: 'AWS::SES::ReceiptRule'
+    DependsOn:
+    - TheDailyNuggetEmailBucket
+    - TheDailyNuggetEmailBucketPermissions
+    - EmailReceivedRuleSet
+    Properties:
+      RuleSetName: !FindInMap [VarMap, staging, DNSESEMAILRECEIPTRULESETNAME]
+      Rule:
+        Name: !FindInMap [VarMap, staging, DNSESEMAILRECEIPTRULENAME]
+        Enabled: true
+        Recipients:
+          - !FindInMap [VarMap, staging, DNSESEMAILRECEIPTRULEEMAILADDRESS]
+        Actions:
+          - S3Action:
+              BucketName:
+                Ref: TheDailyNuggetEmailBucket
+
+  ActiveReceiptRuleSet:
+    Type: Custom::ActiveReceiptRuleSet
+    DependsOn:
+    - CfnSESResources1
+    Properties:
+      RuleSetName: !Ref EmailReceivedRuleSet
+      Region: !Ref 'AWS::Region'
+      ServiceToken: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:binxio-cfn-ses-provider'
+
+#  DkimTokens:
+#    Type: Custom::DkimTokens
+#    Properties:
+#      Domain: !GetAtt 'DomainIdentity.Domain'
+#      Region: !GetAtt 'DomainIdentity.Region'
+#      ServiceToken: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:binxio-cfn-ses-provider'
+
+#  DkimRecords:
+#    Type: AWS::Route53::RecordSetGroup
+#    Properties:
+#      HostedZoneId: !Ref 'zonethedailynuggetnet'
+#      RecordSets: !Ref 'DkimTokens.RecordSets'
+#      RecordSets: !GetAtt 'DkimTokens.RecordSets'
+
+  CfnSESResources2:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3.amazonaws.com/the-daly-nugget-sam-service-staging-custom-cfn-resources/pypy/aws-cfn-ses-domain-0.3.cf.yaml
+      Parameters:
+        LambdaCodeS3Bucket: the-daly-nugget-sam-service-staging-custom-cfn-resources
+        LambdaCodeS3Key: pypy/aws-cfn-ses-domain-0.3.lambda.zip
+
+  # Declare Custom::SES_EmailIdentity resources for each address to verify.
+  MySESSender:
+    Type: Custom::SES_EmailIdentity
+    Properties:
+      # ServiceToken is the Arn of a Lambda Function from the nested stack:
+      ServiceToken: !GetAtt CfnSESResources2.Outputs.CustomEmailIdentityArn
+      # Remaining Properties are options for verifying the email address:
+      # (EmailAddress is required; all others are optional and shown with their defaults)
+      EmailAddress: !FindInMap [VarMap, staging, DNREVSEMAILADDRESS]
+      Region: !Ref "AWS::Region"
+
+  MySESReplyTo:
+    Type: Custom::SES_EmailIdentity
+    Properties:
+      ServiceToken: !GetAtt CfnSESResources2.Outputs.CustomEmailIdentityArn
+      EmailAddress: "noreply@example.com"
+
+  CognitoUserPool:
+    Type: 'AWS::Cognito::UserPool'
+    Properties:
+      UserPoolName: !Sub '${StageParameter}-nuggeteer-user-pool'
+      UsernameAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      Schema:
+        - Name: phone_number
+          AttributeDataType: String
+          Mutable: true
+          Required: false
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: false
+          RequireNumbers: false
+          RequireSymbols: false
+          RequireUppercase: false
+
+  CognitoUserPoolClient:
+    Type: 'AWS::Cognito::UserPoolClient'
+    Properties:
+      ClientName: !Sub '${StageParameter}-nuggeteer-user-pool-client'
+      UserPoolId:
+        Ref: CognitoUserPool
+      ExplicitAuthFlows:
+        - ADMIN_NO_SRP_AUTH
+      GenerateSecret: false
+
+  CognitoIdentityPool:
+    Type: 'AWS::Cognito::IdentityPool'
+    Properties:
+      IdentityPoolName: !Sub '${StageParameter}-nuggeteer_identity_pool'
+      AllowUnauthenticatedIdentities: true
+      CognitoIdentityProviders:
+        - ClientId:
+            Ref: CognitoUserPoolClient
+          ProviderName:
+            'Fn::GetAtt':
+              - CognitoUserPool
+              - ProviderName
+
+  CognitoIdentityPoolRoles:
+    Type: 'AWS::Cognito::IdentityPoolRoleAttachment'
+    Properties:
+      IdentityPoolId:
+        Ref: CognitoIdentityPool
+      Roles:
+        authenticated:
+          'Fn::GetAtt':
+            - CognitoAuthRole
+            - Arn
+        unauthenticated:
+          'Fn::GetAtt':
+            - CognitoUnAuthRole
+            - Arn
+
+  CognitoAuthRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      Path: /
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: cognito-identity.amazonaws.com
+            Action:
+              - 'sts:AssumeRoleWithWebIdentity'
+            Condition:
+              StringEquals:
+                'cognito-identity.amazonaws.com:aud':
+                  Ref: CognitoIdentityPool
+              'ForAnyValue:StringLike':
+                'cognito-identity.amazonaws.com:amr': authenticated
+      Policies:
+        - PolicyName: CognitoAuthorizedPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'mobileanalytics:PutEvents'
+                  - 'cognito-sync:*'
+                  - 'cognito-identity:*'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 's3:*'
+                Resource:
+                  - 'Fn::Join':
+                      - ''
+                      - - 'Fn::GetAtt':
+                            - AttachmentsBucket
+                            - Arn
+                        - /private/
+                        - $
+                        - '{cognito-identity.amazonaws.com:sub}/*'
+              - Effect: Allow
+                Action:
+                  - 'execute-api:Invoke'
+                Resource:
+                  'Fn::Join':
+                    - ''
+                    - - 'arn:aws:execute-api:'
+                      - Ref: 'AWS::Region'
+                      - ':'
+                      - Ref: 'AWS::AccountId'
+                      - ':'
+                      - Ref: TheDalyNuggetService
+                      - /*
+
+  CognitoUnAuthRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      Path: /
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: cognito-identity.amazonaws.com
+            Action:
+              - 'sts:AssumeRoleWithWebIdentity'
+            Condition:
+              StringEquals:
+                'cognito-identity.amazonaws.com:aud':
+                  Ref: CognitoIdentityPool
+              'ForAnyValue:StringLike':
+                'cognito-identity.amazonaws.com:amr': unauthenticated
+      Policies:
+        - PolicyName: CognitoUnAuthorizedPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'mobileanalytics:PutEvents'
+                  - 'cognito-sync:*'
+                Resource: '*'
+
+  DnLambdaExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Principal:
+              Service: 'lambda.amazonaws.com'
+            Action: 'sts:AssumeRole'
+
+  DnLambdaExecutionPolicies:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: 'DnLambdaExecutionPolicy'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Action:
+              - 'ses:*'
+            Resource: '*'
+          - Effect: 'Allow'
+            Action:
+              - 'dynamodb:Query'
+              - 'dynamodb:Scan'
+              - 'dynamodb:GetItem'
+              - 'dynamodb:PutItem'
+              - 'dynamodb:UpdateItem'
+              - 'dynamodb:DeleteItem'
+              - 'dynamodb:GetRecords'
+              - 'dynamodb:GetShardIterator'
+              - 'dynamodb:DescribeStream'
+              - 'dynamodb:ListStreams'
+              - 'dynamodb:DeleteItem'
+            Resource: '*'
+          - Effect: 'Allow'
+            Action:
+              - 'logs:CreateLogGroup'
+              - 'logs:CreateLogStream'
+              - 'logs:PutLogEvents'
+            Resource: '*'
+
+          - Effect: 'Allow'
+            Action:
+              - 's3:CreateBucket'
+              - 's3:DeleteBucket'
+              - 's3:DeleteObject'
+              - 's3:GetObject'
+              - 's3:PutObject'
+              - 's3:ListBucket'
+              - 's3:PutBucketPolicy'
+            Resource: '*'
+          - Effect: 'Allow'
+            Action:
+              - 'cognito-identity:*'
+              - 'cognito-idp:*'
+              - 'cognito-sync:*'
+              - 'iam:ListRoles'
+              - 'iam:ListOpenIdConnectProviders'
+              - 'sns:ListPlatformApplications'
+            Resource: '*'
+          - Effect: 'Allow'
+            Action:
+              - 'sns:*'
+            Resource: '*'
+      Roles:
+        - Ref: 'DnLambdaExecutionRole'
+
+  TheDalyNuggetServiceStagingGetNuggetOfTheDay:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: api/getNuggetOfTheDay.handler
+      Description: Get the daily nugget.
+      Role:
+        'Fn::GetAtt':
+          - DnLambdaExecutionRole
+          - Arn
+      Events:
+        Event1:
+          Type: Api
+          Properties:
+            Path: /nugget-of-day
+            Method: get
+            RestApiId:
+              Ref: TheDalyNuggetService
+
+  TheDalyNuggetService:
+    Type: 'AWS::Serverless::Api'
+    Properties:
+      StageName: staging
+      DefinitionBody:
+        swagger: '2.0'
+        info:
+          title:
+            Ref: 'AWS::StackName'
+        paths:
+          /nugget-of-day:
+            options:
+              x-amazon-apigateway-integration:
+                type: mock
+                requestTemplates:
+                  application/json: '{ "statusCode" : 200 }'
+                responses:
+                  default:
+                    statusCode: 200
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Headers: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key'''
+                      method.response.header.Access-Control-Allow-Methods: '''get'''
+                      method.response.header.Access-Control-Allow-Origin: '''*'''
+                    responseTemplates:
+                      application/json: '{}'
+              responses:
+                '200':
+                  headers:
+                    Access-Control-Allow-Headers:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Origin:
+                      type: string
+            get:
+              x-amazon-apigateway-integration:
+                requestTemplates:
+                  application/json: "\n    #set( $body = $input.json(\"$\") )\n\n    \n  #define(\
+                    \ $loop )\n    {\n    #foreach($key in $map.keySet())\n        #set( $k\
+                    \ = $util.escapeJavaScript($key) )\n        #set( $v = $util.escapeJavaScript($map.get($key)).replaceAll(\"\
+                    \\\\'\", \"'\") )\n        \"$k\":\n          \"$v\"\n          #if( $foreach.hasNext\
+                    \ ) , #end\n    #end\n    }\n  #end\n\n  {\n    \"body\": $body,\n   \
+                    \ \"method\": \"$context.httpMethod\",\n    \"principalId\": \"$context.authorizer.principalId\"\
+                    ,\n    \"stage\": \"$context.stage\",\n\n    \"cognitoPoolClaims\" : {\n\
+                    \       \n       \"sub\": \"$context.authorizer.claims.sub\"\n    },\n\
+                    \n    #set( $map = $context.authorizer )\n    \"enhancedAuthContext\"\
+                    : $loop,\n\n    #set( $map = $input.params().header )\n    \"headers\"\
+                    : $loop,\n\n    #set( $map = $input.params().querystring )\n    \"query\"\
+                    : $loop,\n\n    #set( $map = $input.params().path )\n    \"path\": $loop,\n\
+                    \n    #set( $map = $context.identity )\n    \"identity\": $loop,\n\n \
+                    \   #set( $map = $stageVariables )\n    \"stageVariables\": $loop\n  }\n\
+                    \n  "
+                  application/x-www-form-urlencoded: "\n    #define( $body )\n      {\n  \
+                    \    #foreach( $token in $input.path('$').split('&') )\n        #set(\
+                    \ $keyVal = $token.split('=') )\n        #set( $keyValSize = $keyVal.size()\
+                    \ )\n        #if( $keyValSize >= 1 )\n          #set( $key = $util.escapeJavaScript($util.urlDecode($keyVal[0]))\
+                    \ )\n          #if( $keyValSize >= 2 )\n            #set($val = $util.escapeJavaScript($util.urlDecode($keyVal[1])).replaceAll(\"\
+                    \\\\'\",\"'\"))\n          #else\n            #set( $val = '' )\n    \
+                    \      #end\n          \"$key\": \"$val\"#if($foreach.hasNext),#end\n\
+                    \        #end\n      #end\n      }\n    #end\n\n    \n  #define( $loop\
+                    \ )\n    {\n    #foreach($key in $map.keySet())\n        #set( $k = $util.escapeJavaScript($key)\
+                    \ )\n        #set( $v = $util.escapeJavaScript($map.get($key)).replaceAll(\"\
+                    \\\\'\", \"'\") )\n        \"$k\":\n          \"$v\"\n          #if( $foreach.hasNext\
+                    \ ) , #end\n    #end\n    }\n  #end\n\n  {\n    \"body\": $body,\n   \
+                    \ \"method\": \"$context.httpMethod\",\n    \"principalId\": \"$context.authorizer.principalId\"\
+                    ,\n    \"stage\": \"$context.stage\",\n\n    \"cognitoPoolClaims\" : {\n\
+                    \       \n       \"sub\": \"$context.authorizer.claims.sub\"\n    },\n\
+                    \n    #set( $map = $context.authorizer )\n    \"enhancedAuthContext\"\
+                    : $loop,\n\n    #set( $map = $input.params().header )\n    \"headers\"\
+                    : $loop,\n\n    #set( $map = $input.params().querystring )\n    \"query\"\
+                    : $loop,\n\n    #set( $map = $input.params().path )\n    \"path\": $loop,\n\
+                    \n    #set( $map = $context.identity )\n    \"identity\": $loop,\n\n \
+                    \   #set( $map = $stageVariables )\n    \"stageVariables\": $loop\n  }\n\
+                    \n  "
+                httpMethod: POST
+                type: aws
+                uri:
+                  'Fn::Sub': >-
+                    arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${TheDalyNuggetServiceStagingGetNuggetOfTheDay.Arn}/invocations
+                responses:
+                  default:
+                    statusCode: 200
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Headers: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key'''
+                      method.response.header.Access-Control-Allow-Methods: '''get'''
+                      method.response.header.Access-Control-Allow-Origin: '''*'''
+              responses:
+                '200':
+                  headers:
+                    Access-Control-Allow-Headers:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Origin:
+                      type: string
+          /random-nugget:
+            options:
+              x-amazon-apigateway-integration:
+                type: mock
+                requestTemplates:
+                  application/json: '{ "statusCode" : 200 }'
+                responses:
+                  default:
+                    statusCode: 200
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Headers: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key'''
+                      method.response.header.Access-Control-Allow-Methods: '''post'''
+                      method.response.header.Access-Control-Allow-Origin: '''*'''
+                    responseTemplates:
+                      application/json: '{}'
+              responses:
+                '200':
+                  headers:
+                    Access-Control-Allow-Headers:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Origin:
+                      type: string
+            post:
+              x-amazon-apigateway-integration:
+                requestTemplates:
+                  application/json: "\n    #set( $body = $input.json(\"$\") )\n\n    \n  #define(\
+                    \ $loop )\n    {\n    #foreach($key in $map.keySet())\n        #set( $k\
+                    \ = $util.escapeJavaScript($key) )\n        #set( $v = $util.escapeJavaScript($map.get($key)).replaceAll(\"\
+                    \\\\'\", \"'\") )\n        \"$k\":\n          \"$v\"\n          #if( $foreach.hasNext\
+                    \ ) , #end\n    #end\n    }\n  #end\n\n  {\n    \"body\": $body,\n   \
+                    \ \"method\": \"$context.httpMethod\",\n    \"principalId\": \"$context.authorizer.principalId\"\
+                    ,\n    \"stage\": \"$context.stage\",\n\n    \"cognitoPoolClaims\" : {\n\
+                    \       \n       \"sub\": \"$context.authorizer.claims.sub\"\n    },\n\
+                    \n    #set( $map = $context.authorizer )\n    \"enhancedAuthContext\"\
+                    : $loop,\n\n    #set( $map = $input.params().header )\n    \"headers\"\
+                    : $loop,\n\n    #set( $map = $input.params().querystring )\n    \"query\"\
+                    : $loop,\n\n    #set( $map = $input.params().path )\n    \"path\": $loop,\n\
+                    \n    #set( $map = $context.identity )\n    \"identity\": $loop,\n\n \
+                    \   #set( $map = $stageVariables )\n    \"stageVariables\": $loop\n  }\n\
+                    \n  "
+                  application/x-www-form-urlencoded: "\n    #define( $body )\n      {\n  \
+                    \    #foreach( $token in $input.path('$').split('&') )\n        #set(\
+                    \ $keyVal = $token.split('=') )\n        #set( $keyValSize = $keyVal.size()\
+                    \ )\n        #if( $keyValSize >= 1 )\n          #set( $key = $util.escapeJavaScript($util.urlDecode($keyVal[0]))\
+                    \ )\n          #if( $keyValSize >= 2 )\n            #set($val = $util.escapeJavaScript($util.urlDecode($keyVal[1])).replaceAll(\"\
+                    \\\\'\",\"'\"))\n          #else\n            #set( $val = '' )\n    \
+                    \      #end\n          \"$key\": \"$val\"#if($foreach.hasNext),#end\n\
+                    \        #end\n      #end\n      }\n    #end\n\n    \n  #define( $loop\
+                    \ )\n    {\n    #foreach($key in $map.keySet())\n        #set( $k = $util.escapeJavaScript($key)\
+                    \ )\n        #set( $v = $util.escapeJavaScript($map.get($key)).replaceAll(\"\
+                    \\\\'\", \"'\") )\n        \"$k\":\n          \"$v\"\n          #if( $foreach.hasNext\
+                    \ ) , #end\n    #end\n    }\n  #end\n\n  {\n    \"body\": $body,\n   \
+                    \ \"method\": \"$context.httpMethod\",\n    \"principalId\": \"$context.authorizer.principalId\"\
+                    ,\n    \"stage\": \"$context.stage\",\n\n    \"cognitoPoolClaims\" : {\n\
+                    \       \n       \"sub\": \"$context.authorizer.claims.sub\"\n    },\n\
+                    \n    #set( $map = $context.authorizer )\n    \"enhancedAuthContext\"\
+                    : $loop,\n\n    #set( $map = $input.params().header )\n    \"headers\"\
+                    : $loop,\n\n    #set( $map = $input.params().querystring )\n    \"query\"\
+                    : $loop,\n\n    #set( $map = $input.params().path )\n    \"path\": $loop,\n\
+                    \n    #set( $map = $context.identity )\n    \"identity\": $loop,\n\n \
+                    \   #set( $map = $stageVariables )\n    \"stageVariables\": $loop\n  }\n\
+                    \n  "
+                httpMethod: POST
+                type: aws
+                uri:
+                  'Fn::Sub': >-
+                    arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${TheDalyNuggetServiceStagingGetRandomNugget.Arn}/invocations
+                responses:
+                  default:
+                    statusCode: 200
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Headers: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key'''
+                      method.response.header.Access-Control-Allow-Methods: '''post'''
+                      method.response.header.Access-Control-Allow-Origin: '''*'''
+              responses:
+                '200':
+                  headers:
+                    Access-Control-Allow-Headers:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Origin:
+                      type: string
+          /add-subscriber:
+            options:
+              x-amazon-apigateway-integration:
+                type: mock
+                requestTemplates:
+                  application/json: '{ "statusCode" : 200 }'
+                responses:
+                  default:
+                    statusCode: 200
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Headers: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key'''
+                      method.response.header.Access-Control-Allow-Methods: '''post'''
+                      method.response.header.Access-Control-Allow-Origin: '''*'''
+                    responseTemplates:
+                      application/json: '{}'
+              responses:
+                '200':
+                  headers:
+                    Access-Control-Allow-Headers:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Origin:
+                      type: string
+            post:
+              x-amazon-apigateway-integration:
+                requestTemplates:
+                  application/json: "\n    #set( $body = $input.json(\"$\") )\n\n    \n  #define(\
+                    \ $loop )\n    {\n    #foreach($key in $map.keySet())\n        #set( $k\
+                    \ = $util.escapeJavaScript($key) )\n        #set( $v = $util.escapeJavaScript($map.get($key)).replaceAll(\"\
+                    \\\\'\", \"'\") )\n        \"$k\":\n          \"$v\"\n          #if( $foreach.hasNext\
+                    \ ) , #end\n    #end\n    }\n  #end\n\n  {\n    \"body\": $body,\n   \
+                    \ \"method\": \"$context.httpMethod\",\n    \"principalId\": \"$context.authorizer.principalId\"\
+                    ,\n    \"stage\": \"$context.stage\",\n\n    \"cognitoPoolClaims\" : {\n\
+                    \       \n       \"sub\": \"$context.authorizer.claims.sub\"\n    },\n\
+                    \n    #set( $map = $context.authorizer )\n    \"enhancedAuthContext\"\
+                    : $loop,\n\n    #set( $map = $input.params().header )\n    \"headers\"\
+                    : $loop,\n\n    #set( $map = $input.params().querystring )\n    \"query\"\
+                    : $loop,\n\n    #set( $map = $input.params().path )\n    \"path\": $loop,\n\
+                    \n    #set( $map = $context.identity )\n    \"identity\": $loop,\n\n \
+                    \   #set( $map = $stageVariables )\n    \"stageVariables\": $loop\n  }\n\
+                    \n  "
+                  application/x-www-form-urlencoded: "\n    #define( $body )\n      {\n  \
+                    \    #foreach( $token in $input.path('$').split('&') )\n        #set(\
+                    \ $keyVal = $token.split('=') )\n        #set( $keyValSize = $keyVal.size()\
+                    \ )\n        #if( $keyValSize >= 1 )\n          #set( $key = $util.escapeJavaScript($util.urlDecode($keyVal[0]))\
+                    \ )\n          #if( $keyValSize >= 2 )\n            #set($val = $util.escapeJavaScript($util.urlDecode($keyVal[1])).replaceAll(\"\
+                    \\\\'\",\"'\"))\n          #else\n            #set( $val = '' )\n    \
+                    \      #end\n          \"$key\": \"$val\"#if($foreach.hasNext),#end\n\
+                    \        #end\n      #end\n      }\n    #end\n\n    \n  #define( $loop\
+                    \ )\n    {\n    #foreach($key in $map.keySet())\n        #set( $k = $util.escapeJavaScript($key)\
+                    \ )\n        #set( $v = $util.escapeJavaScript($map.get($key)).replaceAll(\"\
+                    \\\\'\", \"'\") )\n        \"$k\":\n          \"$v\"\n          #if( $foreach.hasNext\
+                    \ ) , #end\n    #end\n    }\n  #end\n\n  {\n    \"body\": $body,\n   \
+                    \ \"method\": \"$context.httpMethod\",\n    \"principalId\": \"$context.authorizer.principalId\"\
+                    ,\n    \"stage\": \"$context.stage\",\n\n    \"cognitoPoolClaims\" : {\n\
+                    \       \n       \"sub\": \"$context.authorizer.claims.sub\"\n    },\n\
+                    \n    #set( $map = $context.authorizer )\n    \"enhancedAuthContext\"\
+                    : $loop,\n\n    #set( $map = $input.params().header )\n    \"headers\"\
+                    : $loop,\n\n    #set( $map = $input.params().querystring )\n    \"query\"\
+                    : $loop,\n\n    #set( $map = $input.params().path )\n    \"path\": $loop,\n\
+                    \n    #set( $map = $context.identity )\n    \"identity\": $loop,\n\n \
+                    \   #set( $map = $stageVariables )\n    \"stageVariables\": $loop\n  }\n\
+                    \n  "
+                httpMethod: POST
+                type: aws
+                uri:
+                  'Fn::Sub': >-
+                    arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${TheDalyNuggetServiceStagingCreateSubscriber.Arn}/invocations
+                responses:
+                  default:
+                    statusCode: 200
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Headers: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key'''
+                      method.response.header.Access-Control-Allow-Methods: '''post'''
+                      method.response.header.Access-Control-Allow-Origin: '''*'''
+              responses:
+                '200':
+                  headers:
+                    Access-Control-Allow-Headers:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Origin:
+                      type: string
+          /register-nuggeteer:
+            options:
+              x-amazon-apigateway-integration:
+                type: mock
+                requestTemplates:
+                  application/json: '{ "statusCode" : 200 }'
+                responses:
+                  default:
+                    statusCode: 200
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Headers: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key'''
+                      method.response.header.Access-Control-Allow-Methods: '''post'''
+                      method.response.header.Access-Control-Allow-Origin: '''*'''
+                    responseTemplates:
+                      application/json: '{}'
+              responses:
+                '200':
+                  headers:
+                    Access-Control-Allow-Headers:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Origin:
+                      type: string
+            post:
+              x-amazon-apigateway-integration:
+                requestTemplates:
+                  application/json: "\n    #set( $body = $input.json(\"$\") )\n\n    \n  #define(\
+                    \ $loop )\n    {\n    #foreach($key in $map.keySet())\n        #set( $k\
+                    \ = $util.escapeJavaScript($key) )\n        #set( $v = $util.escapeJavaScript($map.get($key)).replaceAll(\"\
+                    \\\\'\", \"'\") )\n        \"$k\":\n          \"$v\"\n          #if( $foreach.hasNext\
+                    \ ) , #end\n    #end\n    }\n  #end\n\n  {\n    \"body\": $body,\n   \
+                    \ \"method\": \"$context.httpMethod\",\n    \"principalId\": \"$context.authorizer.principalId\"\
+                    ,\n    \"stage\": \"$context.stage\",\n\n    \"cognitoPoolClaims\" : {\n\
+                    \       \n       \"sub\": \"$context.authorizer.claims.sub\"\n    },\n\
+                    \n    #set( $map = $context.authorizer )\n    \"enhancedAuthContext\"\
+                    : $loop,\n\n    #set( $map = $input.params().header )\n    \"headers\"\
+                    : $loop,\n\n    #set( $map = $input.params().querystring )\n    \"query\"\
+                    : $loop,\n\n    #set( $map = $input.params().path )\n    \"path\": $loop,\n\
+                    \n    #set( $map = $context.identity )\n    \"identity\": $loop,\n\n \
+                    \   #set( $map = $stageVariables )\n    \"stageVariables\": $loop\n  }\n\
+                    \n  "
+                  application/x-www-form-urlencoded: "\n    #define( $body )\n      {\n  \
+                    \    #foreach( $token in $input.path('$').split('&') )\n        #set(\
+                    \ $keyVal = $token.split('=') )\n        #set( $keyValSize = $keyVal.size()\
+                    \ )\n        #if( $keyValSize >= 1 )\n          #set( $key = $util.escapeJavaScript($util.urlDecode($keyVal[0]))\
+                    \ )\n          #if( $keyValSize >= 2 )\n            #set($val = $util.escapeJavaScript($util.urlDecode($keyVal[1])).replaceAll(\"\
+                    \\\\'\",\"'\"))\n          #else\n            #set( $val = '' )\n    \
+                    \      #end\n          \"$key\": \"$val\"#if($foreach.hasNext),#end\n\
+                    \        #end\n      #end\n      }\n    #end\n\n    \n  #define( $loop\
+                    \ )\n    {\n    #foreach($key in $map.keySet())\n        #set( $k = $util.escapeJavaScript($key)\
+                    \ )\n        #set( $v = $util.escapeJavaScript($map.get($key)).replaceAll(\"\
+                    \\\\'\", \"'\") )\n        \"$k\":\n          \"$v\"\n          #if( $foreach.hasNext\
+                    \ ) , #end\n    #end\n    }\n  #end\n\n  {\n    \"body\": $body,\n   \
+                    \ \"method\": \"$context.httpMethod\",\n    \"principalId\": \"$context.authorizer.principalId\"\
+                    ,\n    \"stage\": \"$context.stage\",\n\n    \"cognitoPoolClaims\" : {\n\
+                    \       \n       \"sub\": \"$context.authorizer.claims.sub\"\n    },\n\
+                    \n    #set( $map = $context.authorizer )\n    \"enhancedAuthContext\"\
+                    : $loop,\n\n    #set( $map = $input.params().header )\n    \"headers\"\
+                    : $loop,\n\n    #set( $map = $input.params().querystring )\n    \"query\"\
+                    : $loop,\n\n    #set( $map = $input.params().path )\n    \"path\": $loop,\n\
+                    \n    #set( $map = $context.identity )\n    \"identity\": $loop,\n\n \
+                    \   #set( $map = $stageVariables )\n    \"stageVariables\": $loop\n  }\n\
+                    \n  "
+                httpMethod: POST
+                type: aws
+                uri:
+                  'Fn::Sub': >-
+                    arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${TheDalyNuggetServiceStagingCreateNuggeteer.Arn}/invocations
+                responses:
+                  default:
+                    statusCode: 200
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Headers: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key'''
+                      method.response.header.Access-Control-Allow-Methods: '''post'''
+                      method.response.header.Access-Control-Allow-Origin: '''*'''
+              responses:
+                '200':
+                  headers:
+                    Access-Control-Allow-Headers:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Origin:
+                      type: string
+          /delete-subscriber:
+            options:
+              x-amazon-apigateway-integration:
+                type: mock
+                requestTemplates:
+                  application/json: '{ "statusCode" : 200 }'
+                responses:
+                  default:
+                    statusCode: 200
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Headers: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key'''
+                      method.response.header.Access-Control-Allow-Methods: '''post'''
+                      method.response.header.Access-Control-Allow-Origin: '''*'''
+                    responseTemplates:
+                      application/json: '{}'
+              responses:
+                '200':
+                  headers:
+                    Access-Control-Allow-Headers:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Origin:
+                      type: string
+            post:
+              x-amazon-apigateway-integration:
+                requestTemplates:
+                  application/json: "\n    #set( $body = $input.json(\"$\") )\n\n    \n  #define(\
+                    \ $loop )\n    {\n    #foreach($key in $map.keySet())\n        #set( $k\
+                    \ = $util.escapeJavaScript($key) )\n        #set( $v = $util.escapeJavaScript($map.get($key)).replaceAll(\"\
+                    \\\\'\", \"'\") )\n        \"$k\":\n          \"$v\"\n          #if( $foreach.hasNext\
+                    \ ) , #end\n    #end\n    }\n  #end\n\n  {\n    \"body\": $body,\n   \
+                    \ \"method\": \"$context.httpMethod\",\n    \"principalId\": \"$context.authorizer.principalId\"\
+                    ,\n    \"stage\": \"$context.stage\",\n\n    \"cognitoPoolClaims\" : {\n\
+                    \       \n       \"sub\": \"$context.authorizer.claims.sub\"\n    },\n\
+                    \n    #set( $map = $context.authorizer )\n    \"enhancedAuthContext\"\
+                    : $loop,\n\n    #set( $map = $input.params().header )\n    \"headers\"\
+                    : $loop,\n\n    #set( $map = $input.params().querystring )\n    \"query\"\
+                    : $loop,\n\n    #set( $map = $input.params().path )\n    \"path\": $loop,\n\
+                    \n    #set( $map = $context.identity )\n    \"identity\": $loop,\n\n \
+                    \   #set( $map = $stageVariables )\n    \"stageVariables\": $loop\n  }\n\
+                    \n  "
+                  application/x-www-form-urlencoded: "\n    #define( $body )\n      {\n  \
+                    \    #foreach( $token in $input.path('$').split('&') )\n        #set(\
+                    \ $keyVal = $token.split('=') )\n        #set( $keyValSize = $keyVal.size()\
+                    \ )\n        #if( $keyValSize >= 1 )\n          #set( $key = $util.escapeJavaScript($util.urlDecode($keyVal[0]))\
+                    \ )\n          #if( $keyValSize >= 2 )\n            #set($val = $util.escapeJavaScript($util.urlDecode($keyVal[1])).replaceAll(\"\
+                    \\\\'\",\"'\"))\n          #else\n            #set( $val = '' )\n    \
+                    \      #end\n          \"$key\": \"$val\"#if($foreach.hasNext),#end\n\
+                    \        #end\n      #end\n      }\n    #end\n\n    \n  #define( $loop\
+                    \ )\n    {\n    #foreach($key in $map.keySet())\n        #set( $k = $util.escapeJavaScript($key)\
+                    \ )\n        #set( $v = $util.escapeJavaScript($map.get($key)).replaceAll(\"\
+                    \\\\'\", \"'\") )\n        \"$k\":\n          \"$v\"\n          #if( $foreach.hasNext\
+                    \ ) , #end\n    #end\n    }\n  #end\n\n  {\n    \"body\": $body,\n   \
+                    \ \"method\": \"$context.httpMethod\",\n    \"principalId\": \"$context.authorizer.principalId\"\
+                    ,\n    \"stage\": \"$context.stage\",\n\n    \"cognitoPoolClaims\" : {\n\
+                    \       \n       \"sub\": \"$context.authorizer.claims.sub\"\n    },\n\
+                    \n    #set( $map = $context.authorizer )\n    \"enhancedAuthContext\"\
+                    : $loop,\n\n    #set( $map = $input.params().header )\n    \"headers\"\
+                    : $loop,\n\n    #set( $map = $input.params().querystring )\n    \"query\"\
+                    : $loop,\n\n    #set( $map = $input.params().path )\n    \"path\": $loop,\n\
+                    \n    #set( $map = $context.identity )\n    \"identity\": $loop,\n\n \
+                    \   #set( $map = $stageVariables )\n    \"stageVariables\": $loop\n  }\n\
+                    \n  "
+                httpMethod: POST
+                type: aws
+                uri:
+                  'Fn::Sub': >-
+                    arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${TheDalyNuggetServiceStagingDeleteSubscriber.Arn}/invocations
+                responses:
+                  default:
+                    statusCode: 200
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Headers: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key'''
+                      method.response.header.Access-Control-Allow-Methods: '''post'''
+                      method.response.header.Access-Control-Allow-Origin: '''*'''
+              responses:
+                '200':
+                  headers:
+                    Access-Control-Allow-Headers:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Origin:
+                      type: string
+          /delete-nuggeteer:
+            options:
+              x-amazon-apigateway-integration:
+                type: mock
+                requestTemplates:
+                  application/json: '{ "statusCode" : 200 }'
+                responses:
+                  default:
+                    statusCode: 200
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Headers: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key'''
+                      method.response.header.Access-Control-Allow-Methods: '''post'''
+                      method.response.header.Access-Control-Allow-Origin: '''*'''
+                    responseTemplates:
+                      application/json: '{}'
+              responses:
+                '200':
+                  headers:
+                    Access-Control-Allow-Headers:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Origin:
+                      type: string
+            post:
+              x-amazon-apigateway-integration:
+                requestTemplates:
+                  application/json: "\n    #set( $body = $input.json(\"$\") )\n\n    \n  #define(\
+                    \ $loop )\n    {\n    #foreach($key in $map.keySet())\n        #set( $k\
+                    \ = $util.escapeJavaScript($key) )\n        #set( $v = $util.escapeJavaScript($map.get($key)).replaceAll(\"\
+                    \\\\'\", \"'\") )\n        \"$k\":\n          \"$v\"\n          #if( $foreach.hasNext\
+                    \ ) , #end\n    #end\n    }\n  #end\n\n  {\n    \"body\": $body,\n   \
+                    \ \"method\": \"$context.httpMethod\",\n    \"principalId\": \"$context.authorizer.principalId\"\
+                    ,\n    \"stage\": \"$context.stage\",\n\n    \"cognitoPoolClaims\" : {\n\
+                    \       \n       \"sub\": \"$context.authorizer.claims.sub\"\n    },\n\
+                    \n    #set( $map = $context.authorizer )\n    \"enhancedAuthContext\"\
+                    : $loop,\n\n    #set( $map = $input.params().header )\n    \"headers\"\
+                    : $loop,\n\n    #set( $map = $input.params().querystring )\n    \"query\"\
+                    : $loop,\n\n    #set( $map = $input.params().path )\n    \"path\": $loop,\n\
+                    \n    #set( $map = $context.identity )\n    \"identity\": $loop,\n\n \
+                    \   #set( $map = $stageVariables )\n    \"stageVariables\": $loop\n  }\n\
+                    \n  "
+                  application/x-www-form-urlencoded: "\n    #define( $body )\n      {\n  \
+                    \    #foreach( $token in $input.path('$').split('&') )\n        #set(\
+                    \ $keyVal = $token.split('=') )\n        #set( $keyValSize = $keyVal.size()\
+                    \ )\n        #if( $keyValSize >= 1 )\n          #set( $key = $util.escapeJavaScript($util.urlDecode($keyVal[0]))\
+                    \ )\n          #if( $keyValSize >= 2 )\n            #set($val = $util.escapeJavaScript($util.urlDecode($keyVal[1])).replaceAll(\"\
+                    \\\\'\",\"'\"))\n          #else\n            #set( $val = '' )\n    \
+                    \      #end\n          \"$key\": \"$val\"#if($foreach.hasNext),#end\n\
+                    \        #end\n      #end\n      }\n    #end\n\n    \n  #define( $loop\
+                    \ )\n    {\n    #foreach($key in $map.keySet())\n        #set( $k = $util.escapeJavaScript($key)\
+                    \ )\n        #set( $v = $util.escapeJavaScript($map.get($key)).replaceAll(\"\
+                    \\\\'\", \"'\") )\n        \"$k\":\n          \"$v\"\n          #if( $foreach.hasNext\
+                    \ ) , #end\n    #end\n    }\n  #end\n\n  {\n    \"body\": $body,\n   \
+                    \ \"method\": \"$context.httpMethod\",\n    \"principalId\": \"$context.authorizer.principalId\"\
+                    ,\n    \"stage\": \"$context.stage\",\n\n    \"cognitoPoolClaims\" : {\n\
+                    \       \n       \"sub\": \"$context.authorizer.claims.sub\"\n    },\n\
+                    \n    #set( $map = $context.authorizer )\n    \"enhancedAuthContext\"\
+                    : $loop,\n\n    #set( $map = $input.params().header )\n    \"headers\"\
+                    : $loop,\n\n    #set( $map = $input.params().querystring )\n    \"query\"\
+                    : $loop,\n\n    #set( $map = $input.params().path )\n    \"path\": $loop,\n\
+                    \n    #set( $map = $context.identity )\n    \"identity\": $loop,\n\n \
+                    \   #set( $map = $stageVariables )\n    \"stageVariables\": $loop\n  }\n\
+                    \n  "
+                httpMethod: POST
+                type: aws
+                uri:
+                  'Fn::Sub': >-
+                    arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${TheDalyNuggetServiceStagingDeleteNuggeteer.Arn}/invocations
+                responses:
+                  default:
+                    statusCode: 200
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Headers: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key'''
+                      method.response.header.Access-Control-Allow-Methods: '''post'''
+                      method.response.header.Access-Control-Allow-Origin: '''*'''
+              responses:
+                '200':
+                  headers:
+                    Access-Control-Allow-Headers:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Origin:
+                      type: string
+          /set-nuggeteer-delivery-preferences:
+            options:
+              x-amazon-apigateway-integration:
+                type: mock
+                requestTemplates:
+                  application/json: '{ "statusCode" : 200 }'
+                responses:
+                  default:
+                    statusCode: 200
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Headers: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key'''
+                      method.response.header.Access-Control-Allow-Methods: '''post'''
+                      method.response.header.Access-Control-Allow-Origin: '''*'''
+                    responseTemplates:
+                      application/json: '{}'
+              responses:
+                '200':
+                  headers:
+                    Access-Control-Allow-Headers:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Origin:
+                      type: string
+            post:
+              x-amazon-apigateway-integration:
+                requestTemplates:
+                  application/json: "\n    #set( $body = $input.json(\"$\") )\n\n    \n  #define(\
+                    \ $loop )\n    {\n    #foreach($key in $map.keySet())\n        #set( $k\
+                    \ = $util.escapeJavaScript($key) )\n        #set( $v = $util.escapeJavaScript($map.get($key)).replaceAll(\"\
+                    \\\\'\", \"'\") )\n        \"$k\":\n          \"$v\"\n          #if( $foreach.hasNext\
+                    \ ) , #end\n    #end\n    }\n  #end\n\n  {\n    \"body\": $body,\n   \
+                    \ \"method\": \"$context.httpMethod\",\n    \"principalId\": \"$context.authorizer.principalId\"\
+                    ,\n    \"stage\": \"$context.stage\",\n\n    \"cognitoPoolClaims\" : {\n\
+                    \       \n       \"sub\": \"$context.authorizer.claims.sub\"\n    },\n\
+                    \n    #set( $map = $context.authorizer )\n    \"enhancedAuthContext\"\
+                    : $loop,\n\n    #set( $map = $input.params().header )\n    \"headers\"\
+                    : $loop,\n\n    #set( $map = $input.params().querystring )\n    \"query\"\
+                    : $loop,\n\n    #set( $map = $input.params().path )\n    \"path\": $loop,\n\
+                    \n    #set( $map = $context.identity )\n    \"identity\": $loop,\n\n \
+                    \   #set( $map = $stageVariables )\n    \"stageVariables\": $loop\n  }\n\
+                    \n  "
+                  application/x-www-form-urlencoded: "\n    #define( $body )\n      {\n  \
+                    \    #foreach( $token in $input.path('$').split('&') )\n        #set(\
+                    \ $keyVal = $token.split('=') )\n        #set( $keyValSize = $keyVal.size()\
+                    \ )\n        #if( $keyValSize >= 1 )\n          #set( $key = $util.escapeJavaScript($util.urlDecode($keyVal[0]))\
+                    \ )\n          #if( $keyValSize >= 2 )\n            #set($val = $util.escapeJavaScript($util.urlDecode($keyVal[1])).replaceAll(\"\
+                    \\\\'\",\"'\"))\n          #else\n            #set( $val = '' )\n    \
+                    \      #end\n          \"$key\": \"$val\"#if($foreach.hasNext),#end\n\
+                    \        #end\n      #end\n      }\n    #end\n\n    \n  #define( $loop\
+                    \ )\n    {\n    #foreach($key in $map.keySet())\n        #set( $k = $util.escapeJavaScript($key)\
+                    \ )\n        #set( $v = $util.escapeJavaScript($map.get($key)).replaceAll(\"\
+                    \\\\'\", \"'\") )\n        \"$k\":\n          \"$v\"\n          #if( $foreach.hasNext\
+                    \ ) , #end\n    #end\n    }\n  #end\n\n  {\n    \"body\": $body,\n   \
+                    \ \"method\": \"$context.httpMethod\",\n    \"principalId\": \"$context.authorizer.principalId\"\
+                    ,\n    \"stage\": \"$context.stage\",\n\n    \"cognitoPoolClaims\" : {\n\
+                    \       \n       \"sub\": \"$context.authorizer.claims.sub\"\n    },\n\
+                    \n    #set( $map = $context.authorizer )\n    \"enhancedAuthContext\"\
+                    : $loop,\n\n    #set( $map = $input.params().header )\n    \"headers\"\
+                    : $loop,\n\n    #set( $map = $input.params().querystring )\n    \"query\"\
+                    : $loop,\n\n    #set( $map = $input.params().path )\n    \"path\": $loop,\n\
+                    \n    #set( $map = $context.identity )\n    \"identity\": $loop,\n\n \
+                    \   #set( $map = $stageVariables )\n    \"stageVariables\": $loop\n  }\n\
+                    \n  "
+                httpMethod: POST
+                type: aws
+                uri:
+                  'Fn::Sub': >-
+                    arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${TheDalyNuggetServiceStagingUpdateNuggeteerDelivPrefs.Arn}/invocations
+                responses:
+                  default:
+                    statusCode: 200
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Headers: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key'''
+                      method.response.header.Access-Control-Allow-Methods: '''post'''
+                      method.response.header.Access-Control-Allow-Origin: '''*'''
+              responses:
+                '200':
+                  headers:
+                    Access-Control-Allow-Headers:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Origin:
+                      type: string
+          /get-nuggeteer-delivery-preferences:
+            options:
+              x-amazon-apigateway-integration:
+                type: mock
+                requestTemplates:
+                  application/json: '{ "statusCode" : 200 }'
+                responses:
+                  default:
+                    statusCode: 200
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Headers: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key'''
+                      method.response.header.Access-Control-Allow-Methods: '''post'''
+                      method.response.header.Access-Control-Allow-Origin: '''*'''
+                    responseTemplates:
+                      application/json: '{}'
+              responses:
+                '200':
+                  headers:
+                    Access-Control-Allow-Headers:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Origin:
+                      type: string
+            post:
+              x-amazon-apigateway-integration:
+                requestTemplates:
+                  application/json: "\n    #set( $body = $input.json(\"$\") )\n\n    \n  #define(\
+                    \ $loop )\n    {\n    #foreach($key in $map.keySet())\n        #set( $k\
+                    \ = $util.escapeJavaScript($key) )\n        #set( $v = $util.escapeJavaScript($map.get($key)).replaceAll(\"\
+                    \\\\'\", \"'\") )\n        \"$k\":\n          \"$v\"\n          #if( $foreach.hasNext\
+                    \ ) , #end\n    #end\n    }\n  #end\n\n  {\n    \"body\": $body,\n   \
+                    \ \"method\": \"$context.httpMethod\",\n    \"principalId\": \"$context.authorizer.principalId\"\
+                    ,\n    \"stage\": \"$context.stage\",\n\n    \"cognitoPoolClaims\" : {\n\
+                    \       \n       \"sub\": \"$context.authorizer.claims.sub\"\n    },\n\
+                    \n    #set( $map = $context.authorizer )\n    \"enhancedAuthContext\"\
+                    : $loop,\n\n    #set( $map = $input.params().header )\n    \"headers\"\
+                    : $loop,\n\n    #set( $map = $input.params().querystring )\n    \"query\"\
+                    : $loop,\n\n    #set( $map = $input.params().path )\n    \"path\": $loop,\n\
+                    \n    #set( $map = $context.identity )\n    \"identity\": $loop,\n\n \
+                    \   #set( $map = $stageVariables )\n    \"stageVariables\": $loop\n  }\n\
+                    \n  "
+                  application/x-www-form-urlencoded: "\n    #define( $body )\n      {\n  \
+                    \    #foreach( $token in $input.path('$').split('&') )\n        #set(\
+                    \ $keyVal = $token.split('=') )\n        #set( $keyValSize = $keyVal.size()\
+                    \ )\n        #if( $keyValSize >= 1 )\n          #set( $key = $util.escapeJavaScript($util.urlDecode($keyVal[0]))\
+                    \ )\n          #if( $keyValSize >= 2 )\n            #set($val = $util.escapeJavaScript($util.urlDecode($keyVal[1])).replaceAll(\"\
+                    \\\\'\",\"'\"))\n          #else\n            #set( $val = '' )\n    \
+                    \      #end\n          \"$key\": \"$val\"#if($foreach.hasNext),#end\n\
+                    \        #end\n      #end\n      }\n    #end\n\n    \n  #define( $loop\
+                    \ )\n    {\n    #foreach($key in $map.keySet())\n        #set( $k = $util.escapeJavaScript($key)\
+                    \ )\n        #set( $v = $util.escapeJavaScript($map.get($key)).replaceAll(\"\
+                    \\\\'\", \"'\") )\n        \"$k\":\n          \"$v\"\n          #if( $foreach.hasNext\
+                    \ ) , #end\n    #end\n    }\n  #end\n\n  {\n    \"body\": $body,\n   \
+                    \ \"method\": \"$context.httpMethod\",\n    \"principalId\": \"$context.authorizer.principalId\"\
+                    ,\n    \"stage\": \"$context.stage\",\n\n    \"cognitoPoolClaims\" : {\n\
+                    \       \n       \"sub\": \"$context.authorizer.claims.sub\"\n    },\n\
+                    \n    #set( $map = $context.authorizer )\n    \"enhancedAuthContext\"\
+                    : $loop,\n\n    #set( $map = $input.params().header )\n    \"headers\"\
+                    : $loop,\n\n    #set( $map = $input.params().querystring )\n    \"query\"\
+                    : $loop,\n\n    #set( $map = $input.params().path )\n    \"path\": $loop,\n\
+                    \n    #set( $map = $context.identity )\n    \"identity\": $loop,\n\n \
+                    \   #set( $map = $stageVariables )\n    \"stageVariables\": $loop\n  }\n\
+                    \n  "
+                httpMethod: POST
+                type: aws
+                uri:
+                  'Fn::Sub': >-
+                    arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${TheDalyNuggetServiceStagingGetNuggeteerDelivPrefs.Arn}/invocations
+                responses:
+                  default:
+                    statusCode: 200
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Headers: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key'''
+                      method.response.header.Access-Control-Allow-Methods: '''post'''
+                      method.response.header.Access-Control-Allow-Origin: '''*'''
+              responses:
+                '200':
+                  headers:
+                    Access-Control-Allow-Headers:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Origin:
+                      type: string
+          /change-nuggeteer-phone:
+            options:
+              x-amazon-apigateway-integration:
+                type: mock
+                requestTemplates:
+                  application/json: '{ "statusCode" : 200 }'
+                responses:
+                  default:
+                    statusCode: 200
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Headers: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key'''
+                      method.response.header.Access-Control-Allow-Methods: '''post'''
+                      method.response.header.Access-Control-Allow-Origin: '''*'''
+                    responseTemplates:
+                      application/json: '{}'
+              responses:
+                '200':
+                  headers:
+                    Access-Control-Allow-Headers:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Origin:
+                      type: string
+            post:
+              x-amazon-apigateway-integration:
+                requestTemplates:
+                  application/json: "\n    #set( $body = $input.json(\"$\") )\n\n    \n  #define(\
+                    \ $loop )\n    {\n    #foreach($key in $map.keySet())\n        #set( $k\
+                    \ = $util.escapeJavaScript($key) )\n        #set( $v = $util.escapeJavaScript($map.get($key)).replaceAll(\"\
+                    \\\\'\", \"'\") )\n        \"$k\":\n          \"$v\"\n          #if( $foreach.hasNext\
+                    \ ) , #end\n    #end\n    }\n  #end\n\n  {\n    \"body\": $body,\n   \
+                    \ \"method\": \"$context.httpMethod\",\n    \"principalId\": \"$context.authorizer.principalId\"\
+                    ,\n    \"stage\": \"$context.stage\",\n\n    \"cognitoPoolClaims\" : {\n\
+                    \       \n       \"sub\": \"$context.authorizer.claims.sub\"\n    },\n\
+                    \n    #set( $map = $context.authorizer )\n    \"enhancedAuthContext\"\
+                    : $loop,\n\n    #set( $map = $input.params().header )\n    \"headers\"\
+                    : $loop,\n\n    #set( $map = $input.params().querystring )\n    \"query\"\
+                    : $loop,\n\n    #set( $map = $input.params().path )\n    \"path\": $loop,\n\
+                    \n    #set( $map = $context.identity )\n    \"identity\": $loop,\n\n \
+                    \   #set( $map = $stageVariables )\n    \"stageVariables\": $loop\n  }\n\
+                    \n  "
+                  application/x-www-form-urlencoded: "\n    #define( $body )\n      {\n  \
+                    \    #foreach( $token in $input.path('$').split('&') )\n        #set(\
+                    \ $keyVal = $token.split('=') )\n        #set( $keyValSize = $keyVal.size()\
+                    \ )\n        #if( $keyValSize >= 1 )\n          #set( $key = $util.escapeJavaScript($util.urlDecode($keyVal[0]))\
+                    \ )\n          #if( $keyValSize >= 2 )\n            #set($val = $util.escapeJavaScript($util.urlDecode($keyVal[1])).replaceAll(\"\
+                    \\\\'\",\"'\"))\n          #else\n            #set( $val = '' )\n    \
+                    \      #end\n          \"$key\": \"$val\"#if($foreach.hasNext),#end\n\
+                    \        #end\n      #end\n      }\n    #end\n\n    \n  #define( $loop\
+                    \ )\n    {\n    #foreach($key in $map.keySet())\n        #set( $k = $util.escapeJavaScript($key)\
+                    \ )\n        #set( $v = $util.escapeJavaScript($map.get($key)).replaceAll(\"\
+                    \\\\'\", \"'\") )\n        \"$k\":\n          \"$v\"\n          #if( $foreach.hasNext\
+                    \ ) , #end\n    #end\n    }\n  #end\n\n  {\n    \"body\": $body,\n   \
+                    \ \"method\": \"$context.httpMethod\",\n    \"principalId\": \"$context.authorizer.principalId\"\
+                    ,\n    \"stage\": \"$context.stage\",\n\n    \"cognitoPoolClaims\" : {\n\
+                    \       \n       \"sub\": \"$context.authorizer.claims.sub\"\n    },\n\
+                    \n    #set( $map = $context.authorizer )\n    \"enhancedAuthContext\"\
+                    : $loop,\n\n    #set( $map = $input.params().header )\n    \"headers\"\
+                    : $loop,\n\n    #set( $map = $input.params().querystring )\n    \"query\"\
+                    : $loop,\n\n    #set( $map = $input.params().path )\n    \"path\": $loop,\n\
+                    \n    #set( $map = $context.identity )\n    \"identity\": $loop,\n\n \
+                    \   #set( $map = $stageVariables )\n    \"stageVariables\": $loop\n  }\n\
+                    \n  "
+                httpMethod: POST
+                type: aws
+                uri:
+                  'Fn::Sub': >-
+                    arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${TheDalyNuggetServiceStagingUpdateNuggeteerPhone.Arn}/invocations
+                responses:
+                  default:
+                    statusCode: 200
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Headers: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key'''
+                      method.response.header.Access-Control-Allow-Methods: '''post'''
+                      method.response.header.Access-Control-Allow-Origin: '''*'''
+              responses:
+                '200':
+                  headers:
+                    Access-Control-Allow-Headers:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Origin:
+                      type: string
+          /get-nuggeteer:
+            options:
+              x-amazon-apigateway-integration:
+                type: mock
+                requestTemplates:
+                  application/json: '{ "statusCode" : 200 }'
+                responses:
+                  default:
+                    statusCode: 200
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Headers: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key'''
+                      method.response.header.Access-Control-Allow-Methods: '''post'''
+                      method.response.header.Access-Control-Allow-Origin: '''*'''
+                    responseTemplates:
+                      application/json: '{}'
+              responses:
+                '200':
+                  headers:
+                    Access-Control-Allow-Headers:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Origin:
+                      type: string
+            post:
+              x-amazon-apigateway-integration:
+                requestTemplates:
+                  application/json: "\n    #set( $body = $input.json(\"$\") )\n\n    \n  #define(\
+                    \ $loop )\n    {\n    #foreach($key in $map.keySet())\n        #set( $k\
+                    \ = $util.escapeJavaScript($key) )\n        #set( $v = $util.escapeJavaScript($map.get($key)).replaceAll(\"\
+                    \\\\'\", \"'\") )\n        \"$k\":\n          \"$v\"\n          #if( $foreach.hasNext\
+                    \ ) , #end\n    #end\n    }\n  #end\n\n  {\n    \"body\": $body,\n   \
+                    \ \"method\": \"$context.httpMethod\",\n    \"principalId\": \"$context.authorizer.principalId\"\
+                    ,\n    \"stage\": \"$context.stage\",\n\n    \"cognitoPoolClaims\" : {\n\
+                    \       \n       \"sub\": \"$context.authorizer.claims.sub\"\n    },\n\
+                    \n    #set( $map = $context.authorizer )\n    \"enhancedAuthContext\"\
+                    : $loop,\n\n    #set( $map = $input.params().header )\n    \"headers\"\
+                    : $loop,\n\n    #set( $map = $input.params().querystring )\n    \"query\"\
+                    : $loop,\n\n    #set( $map = $input.params().path )\n    \"path\": $loop,\n\
+                    \n    #set( $map = $context.identity )\n    \"identity\": $loop,\n\n \
+                    \   #set( $map = $stageVariables )\n    \"stageVariables\": $loop\n  }\n\
+                    \n  "
+                  application/x-www-form-urlencoded: "\n    #define( $body )\n      {\n  \
+                    \    #foreach( $token in $input.path('$').split('&') )\n        #set(\
+                    \ $keyVal = $token.split('=') )\n        #set( $keyValSize = $keyVal.size()\
+                    \ )\n        #if( $keyValSize >= 1 )\n          #set( $key = $util.escapeJavaScript($util.urlDecode($keyVal[0]))\
+                    \ )\n          #if( $keyValSize >= 2 )\n            #set($val = $util.escapeJavaScript($util.urlDecode($keyVal[1])).replaceAll(\"\
+                    \\\\'\",\"'\"))\n          #else\n            #set( $val = '' )\n    \
+                    \      #end\n          \"$key\": \"$val\"#if($foreach.hasNext),#end\n\
+                    \        #end\n      #end\n      }\n    #end\n\n    \n  #define( $loop\
+                    \ )\n    {\n    #foreach($key in $map.keySet())\n        #set( $k = $util.escapeJavaScript($key)\
+                    \ )\n        #set( $v = $util.escapeJavaScript($map.get($key)).replaceAll(\"\
+                    \\\\'\", \"'\") )\n        \"$k\":\n          \"$v\"\n          #if( $foreach.hasNext\
+                    \ ) , #end\n    #end\n    }\n  #end\n\n  {\n    \"body\": $body,\n   \
+                    \ \"method\": \"$context.httpMethod\",\n    \"principalId\": \"$context.authorizer.principalId\"\
+                    ,\n    \"stage\": \"$context.stage\",\n\n    \"cognitoPoolClaims\" : {\n\
+                    \       \n       \"sub\": \"$context.authorizer.claims.sub\"\n    },\n\
+                    \n    #set( $map = $context.authorizer )\n    \"enhancedAuthContext\"\
+                    : $loop,\n\n    #set( $map = $input.params().header )\n    \"headers\"\
+                    : $loop,\n\n    #set( $map = $input.params().querystring )\n    \"query\"\
+                    : $loop,\n\n    #set( $map = $input.params().path )\n    \"path\": $loop,\n\
+                    \n    #set( $map = $context.identity )\n    \"identity\": $loop,\n\n \
+                    \   #set( $map = $stageVariables )\n    \"stageVariables\": $loop\n  }\n\
+                    \n  "
+                httpMethod: POST
+                type: aws
+                uri:
+                  'Fn::Sub': >-
+                    arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${TheDalyNuggetServiceStagingGetNuggeteer.Arn}/invocations
+                responses:
+                  default:
+                    statusCode: 200
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Headers: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key'''
+                      method.response.header.Access-Control-Allow-Methods: '''post'''
+                      method.response.header.Access-Control-Allow-Origin: '''*'''
+              responses:
+                '200':
+                  headers:
+                    Access-Control-Allow-Headers:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Origin:
+                      type: string
+          /get-serverless-outputs:
+            options:
+              x-amazon-apigateway-integration:
+                type: mock
+                requestTemplates:
+                  application/json: '{ "statusCode" : 200 }'
+                responses:
+                  default:
+                    statusCode: 200
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Headers: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key'''
+                      method.response.header.Access-Control-Allow-Methods: '''get'''
+                      method.response.header.Access-Control-Allow-Origin: '''*'''
+                    responseTemplates:
+                      application/json: '{}'
+              responses:
+                '200':
+                  headers:
+                    Access-Control-Allow-Headers:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Origin:
+                      type: string
+            get:
+              x-amazon-apigateway-integration:
+                requestTemplates:
+                  application/json: "\n    #set( $body = $input.json(\"$\") )\n\n    \n  #define(\
+                    \ $loop )\n    {\n    #foreach($key in $map.keySet())\n        #set( $k\
+                    \ = $util.escapeJavaScript($key) )\n        #set( $v = $util.escapeJavaScript($map.get($key)).replaceAll(\"\
+                    \\\\'\", \"'\") )\n        \"$k\":\n          \"$v\"\n          #if( $foreach.hasNext\
+                    \ ) , #end\n    #end\n    }\n  #end\n\n  {\n    \"body\": $body,\n   \
+                    \ \"method\": \"$context.httpMethod\",\n    \"principalId\": \"$context.authorizer.principalId\"\
+                    ,\n    \"stage\": \"$context.stage\",\n\n    \"cognitoPoolClaims\" : {\n\
+                    \       \n       \"sub\": \"$context.authorizer.claims.sub\"\n    },\n\
+                    \n    #set( $map = $context.authorizer )\n    \"enhancedAuthContext\"\
+                    : $loop,\n\n    #set( $map = $input.params().header )\n    \"headers\"\
+                    : $loop,\n\n    #set( $map = $input.params().querystring )\n    \"query\"\
+                    : $loop,\n\n    #set( $map = $input.params().path )\n    \"path\": $loop,\n\
+                    \n    #set( $map = $context.identity )\n    \"identity\": $loop,\n\n \
+                    \   #set( $map = $stageVariables )\n    \"stageVariables\": $loop\n  }\n\
+                    \n  "
+                  application/x-www-form-urlencoded: "\n    #define( $body )\n      {\n  \
+                    \    #foreach( $token in $input.path('$').split('&') )\n        #set(\
+                    \ $keyVal = $token.split('=') )\n        #set( $keyValSize = $keyVal.size()\
+                    \ )\n        #if( $keyValSize >= 1 )\n          #set( $key = $util.escapeJavaScript($util.urlDecode($keyVal[0]))\
+                    \ )\n          #if( $keyValSize >= 2 )\n            #set($val = $util.escapeJavaScript($util.urlDecode($keyVal[1])).replaceAll(\"\
+                    \\\\'\",\"'\"))\n          #else\n            #set( $val = '' )\n    \
+                    \      #end\n          \"$key\": \"$val\"#if($foreach.hasNext),#end\n\
+                    \        #end\n      #end\n      }\n    #end\n\n    \n  #define( $loop\
+                    \ )\n    {\n    #foreach($key in $map.keySet())\n        #set( $k = $util.escapeJavaScript($key)\
+                    \ )\n        #set( $v = $util.escapeJavaScript($map.get($key)).replaceAll(\"\
+                    \\\\'\", \"'\") )\n        \"$k\":\n          \"$v\"\n          #if( $foreach.hasNext\
+                    \ ) , #end\n    #end\n    }\n  #end\n\n  {\n    \"body\": $body,\n   \
+                    \ \"method\": \"$context.httpMethod\",\n    \"principalId\": \"$context.authorizer.principalId\"\
+                    ,\n    \"stage\": \"$context.stage\",\n\n    \"cognitoPoolClaims\" : {\n\
+                    \       \n       \"sub\": \"$context.authorizer.claims.sub\"\n    },\n\
+                    \n    #set( $map = $context.authorizer )\n    \"enhancedAuthContext\"\
+                    : $loop,\n\n    #set( $map = $input.params().header )\n    \"headers\"\
+                    : $loop,\n\n    #set( $map = $input.params().querystring )\n    \"query\"\
+                    : $loop,\n\n    #set( $map = $input.params().path )\n    \"path\": $loop,\n\
+                    \n    #set( $map = $context.identity )\n    \"identity\": $loop,\n\n \
+                    \   #set( $map = $stageVariables )\n    \"stageVariables\": $loop\n  }\n\
+                    \n  "
+                httpMethod: POST
+                type: aws
+                uri:
+                  'Fn::Sub': >-
+                    arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${TheDalyNuggetServiceStagingGetServerlessOutputs.Arn}/invocations
+                responses:
+                  default:
+                    statusCode: 200
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Headers: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key'''
+                      method.response.header.Access-Control-Allow-Methods: '''get'''
+                      method.response.header.Access-Control-Allow-Origin: '''*'''
+              responses:
+                '200':
+                  headers:
+                    Access-Control-Allow-Headers:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Origin:
+                      type: string
+          /delete-cognito-user:
+            options:
+              x-amazon-apigateway-integration:
+                type: mock
+                requestTemplates:
+                  application/json: '{ "statusCode" : 200 }'
+                responses:
+                  default:
+                    statusCode: 200
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Headers: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key'''
+                      method.response.header.Access-Control-Allow-Methods: '''post'''
+                      method.response.header.Access-Control-Allow-Origin: '''*'''
+                    responseTemplates:
+                      application/json: '{}'
+              responses:
+                '200':
+                  headers:
+                    Access-Control-Allow-Headers:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Origin:
+                      type: string
+            post:
+              x-amazon-apigateway-integration:
+                requestTemplates:
+                  application/json: "\n    #set( $body = $input.json(\"$\") )\n\n    \n  #define(\
+                    \ $loop )\n    {\n    #foreach($key in $map.keySet())\n        #set( $k\
+                    \ = $util.escapeJavaScript($key) )\n        #set( $v = $util.escapeJavaScript($map.get($key)).replaceAll(\"\
+                    \\\\'\", \"'\") )\n        \"$k\":\n          \"$v\"\n          #if( $foreach.hasNext\
+                    \ ) , #end\n    #end\n    }\n  #end\n\n  {\n    \"body\": $body,\n   \
+                    \ \"method\": \"$context.httpMethod\",\n    \"principalId\": \"$context.authorizer.principalId\"\
+                    ,\n    \"stage\": \"$context.stage\",\n\n    \"cognitoPoolClaims\" : {\n\
+                    \       \n       \"sub\": \"$context.authorizer.claims.sub\"\n    },\n\
+                    \n    #set( $map = $context.authorizer )\n    \"enhancedAuthContext\"\
+                    : $loop,\n\n    #set( $map = $input.params().header )\n    \"headers\"\
+                    : $loop,\n\n    #set( $map = $input.params().querystring )\n    \"query\"\
+                    : $loop,\n\n    #set( $map = $input.params().path )\n    \"path\": $loop,\n\
+                    \n    #set( $map = $context.identity )\n    \"identity\": $loop,\n\n \
+                    \   #set( $map = $stageVariables )\n    \"stageVariables\": $loop\n  }\n\
+                    \n  "
+                  application/x-www-form-urlencoded: "\n    #define( $body )\n      {\n  \
+                    \    #foreach( $token in $input.path('$').split('&') )\n        #set(\
+                    \ $keyVal = $token.split('=') )\n        #set( $keyValSize = $keyVal.size()\
+                    \ )\n        #if( $keyValSize >= 1 )\n          #set( $key = $util.escapeJavaScript($util.urlDecode($keyVal[0]))\
+                    \ )\n          #if( $keyValSize >= 2 )\n            #set($val = $util.escapeJavaScript($util.urlDecode($keyVal[1])).replaceAll(\"\
+                    \\\\'\",\"'\"))\n          #else\n            #set( $val = '' )\n    \
+                    \      #end\n          \"$key\": \"$val\"#if($foreach.hasNext),#end\n\
+                    \        #end\n      #end\n      }\n    #end\n\n    \n  #define( $loop\
+                    \ )\n    {\n    #foreach($key in $map.keySet())\n        #set( $k = $util.escapeJavaScript($key)\
+                    \ )\n        #set( $v = $util.escapeJavaScript($map.get($key)).replaceAll(\"\
+                    \\\\'\", \"'\") )\n        \"$k\":\n          \"$v\"\n          #if( $foreach.hasNext\
+                    \ ) , #end\n    #end\n    }\n  #end\n\n  {\n    \"body\": $body,\n   \
+                    \ \"method\": \"$context.httpMethod\",\n    \"principalId\": \"$context.authorizer.principalId\"\
+                    ,\n    \"stage\": \"$context.stage\",\n\n    \"cognitoPoolClaims\" : {\n\
+                    \       \n       \"sub\": \"$context.authorizer.claims.sub\"\n    },\n\
+                    \n    #set( $map = $context.authorizer )\n    \"enhancedAuthContext\"\
+                    : $loop,\n\n    #set( $map = $input.params().header )\n    \"headers\"\
+                    : $loop,\n\n    #set( $map = $input.params().querystring )\n    \"query\"\
+                    : $loop,\n\n    #set( $map = $input.params().path )\n    \"path\": $loop,\n\
+                    \n    #set( $map = $context.identity )\n    \"identity\": $loop,\n\n \
+                    \   #set( $map = $stageVariables )\n    \"stageVariables\": $loop\n  }\n\
+                    \n  "
+                httpMethod: POST
+                type: aws
+                uri:
+                  'Fn::Sub': >-
+                    arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${TheDalyNuggetServiceStagingDeleteCognitoUser.Arn}/invocations
+                responses:
+                  default:
+                    statusCode: 200
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Headers: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key'''
+                      method.response.header.Access-Control-Allow-Methods: '''post'''
+                      method.response.header.Access-Control-Allow-Origin: '''*'''
+              responses:
+                '200':
+                  headers:
+                    Access-Control-Allow-Headers:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Origin:
+                      type: string
+
+  TheDalyNuggetServiceStagingGetNuggetOfTheDayLambdaPermission:
+    Type: 'AWS::Lambda::Permission'
+    DependsOn:
+      - TheDalyNuggetServiceStagingGetNuggetOfTheDay
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName:
+        Ref: TheDalyNuggetServiceStagingGetNuggetOfTheDay
+      Principal: apigateway.amazonaws.com
+
+  TheDalyNuggetServiceStagingGetRandomNugget:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: api/getRandomNugget.handler
+      Description: Get a nugget from the nugget-base table.
+      Role:
+        'Fn::GetAtt':
+          - DnLambdaExecutionRole
+          - Arn
+      Events:
+        Event1:
+          Type: Api
+          Properties:
+            Path: /random-nugget
+            Method: post
+            RestApiId:
+              Ref: TheDalyNuggetService
+
+  TheDalyNuggetServiceStagingGetRandomNuggetLambdaPermission:
+    Type: 'AWS::Lambda::Permission'
+    DependsOn:
+      - TheDalyNuggetServiceStagingGetRandomNugget
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName:
+        Ref: TheDalyNuggetServiceStagingGetRandomNugget
+      Principal: apigateway.amazonaws.com
+
+  TheDalyNuggetServiceStagingCreateSubscriber:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: api/createSubscriber.handler
+      Description: Add a user's email to the User table.
+      Role:
+        'Fn::GetAtt':
+          - DnLambdaExecutionRole
+          - Arn
+      Events:
+        Event1:
+          Type: Api
+          Properties:
+            Path: /add-subscriber
+            Method: post
+            RestApiId:
+              Ref: TheDalyNuggetService
+
+  TheDalyNuggetServiceStagingCreateSubscriberLambdaPermission:
+    Type: 'AWS::Lambda::Permission'
+    DependsOn:
+      - TheDalyNuggetServiceStagingCreateSubscriber
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName:
+        Ref: TheDalyNuggetServiceStagingCreateSubscriber
+      Principal: apigateway.amazonaws.com
+
+  TheDalyNuggetServiceStagingCreateNuggeteer:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: api/createNuggeteer.handler
+      Description: Add a user's info to the nuggeteer table.
+      Role:
+        'Fn::GetAtt':
+          - DnLambdaExecutionRole
+          - Arn
+      Events:
+        Event1:
+          Type: Api
+          Properties:
+            Path: /register-nuggeteer
+            Method: post
+            RestApiId:
+              Ref: TheDalyNuggetService
+
+  TheDalyNuggetServiceStagingCreateNuggeteerLambdaPermission:
+    Type: 'AWS::Lambda::Permission'
+    DependsOn:
+      - TheDalyNuggetServiceStagingCreateNuggeteer
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName:
+        Ref: TheDalyNuggetServiceStagingCreateNuggeteer
+      Principal: apigateway.amazonaws.com
+
+  TheDalyNuggetServiceStagingDeleteSubscriber:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: api/deleteSubscriber.handler
+      Description: Delete a subscriber.
+      Role:
+        'Fn::GetAtt':
+          - DnLambdaExecutionRole
+          - Arn
+      Events:
+        Event1:
+          Type: Api
+          Properties:
+            Path: /delete-subscriber
+            Method: post
+            RestApiId:
+              Ref: TheDalyNuggetService
+
+  TheDalyNuggetServiceStagingDeleteSubscriberLambdaPermission:
+    Type: 'AWS::Lambda::Permission'
+    DependsOn:
+      - TheDalyNuggetServiceStagingDeleteSubscriber
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName:
+        Ref: TheDalyNuggetServiceStagingDeleteSubscriber
+      Principal: apigateway.amazonaws.com
+
+  TheDalyNuggetServiceStagingDeleteNuggeteer:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: api/deleteNuggeteer.handler
+      Description: Delete an entry in the nuggeteer table.
+      Role:
+        'Fn::GetAtt':
+          - DnLambdaExecutionRole
+          - Arn
+      Events:
+        Event1:
+          Type: Api
+          Properties:
+            Path: /delete-nuggeteer
+            Method: post
+            RestApiId:
+              Ref: TheDalyNuggetService
+
+  TheDalyNuggetServiceStagingDeleteNuggeteerLambdaPermission:
+    Type: 'AWS::Lambda::Permission'
+    DependsOn:
+      - TheDalyNuggetServiceStagingDeleteNuggeteer
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName:
+        Ref: TheDalyNuggetServiceStagingDeleteNuggeteer
+      Principal: apigateway.amazonaws.com
+
+  TheDalyNuggetServiceStagingUpdateNuggeteerDelivPrefs:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: api/updateNuggeteerDelivPrefs.handler
+      Description: Set the nugget delivery method and frequency.
+      Role:
+        'Fn::GetAtt':
+          - DnLambdaExecutionRole
+          - Arn
+      Events:
+        Event1:
+          Type: Api
+          Properties:
+            Path: /set-nuggeteer-delivery-preferences
+            Method: post
+            RestApiId:
+              Ref: TheDalyNuggetService
+
+  TheDalyNuggetServiceStagingUpdateNuggeteerDelivPrefsLambdaPermission:
+    Type: 'AWS::Lambda::Permission'
+    DependsOn:
+      - TheDalyNuggetServiceStagingUpdateNuggeteerDelivPrefs
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName:
+        Ref: TheDalyNuggetServiceStagingUpdateNuggeteerDelivPrefs
+      Principal: apigateway.amazonaws.com
+
+  TheDalyNuggetServiceStagingGetNuggeteerDelivPrefs:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: api/getNuggeteerDelivPrefs.handler
+      Description: Get the nugget delivery method and frequency.
+      Role:
+        'Fn::GetAtt':
+          - DnLambdaExecutionRole
+          - Arn
+      Events:
+        Event1:
+          Type: Api
+          Properties:
+            Path: /get-nuggeteer-delivery-preferences
+            Method: post
+            RestApiId:
+              Ref: TheDalyNuggetService
+
+  TheDalyNuggetServiceStagingGetNuggeteerDelivPrefsLambdaPermission:
+    Type: 'AWS::Lambda::Permission'
+    DependsOn:
+      - TheDalyNuggetServiceStagingGetNuggeteerDelivPrefs
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName:
+        Ref: TheDalyNuggetServiceStagingGetNuggeteerDelivPrefs
+      Principal: apigateway.amazonaws.com
+
+  TheDalyNuggetServiceStagingUpdateNuggeteerPhone:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: api/updateNuggeteerPhone.handler
+      Description: Update user's cell phone.
+      Role:
+        'Fn::GetAtt':
+          - DnLambdaExecutionRole
+          - Arn
+      Events:
+        Event1:
+          Type: Api
+          Properties:
+            Path: /change-nuggeteer-phone
+            Method: post
+            RestApiId:
+              Ref: TheDalyNuggetService
+
+  TheDalyNuggetServiceStagingUpdateNuggeteerPhoneLambdaPermission:
+    Type: 'AWS::Lambda::Permission'
+    DependsOn:
+      - TheDalyNuggetServiceStagingUpdateNuggeteerPhone
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName:
+        Ref: TheDalyNuggetServiceStagingUpdateNuggeteerPhone
+      Principal: apigateway.amazonaws.com
+
+  TheDalyNuggetServiceStagingGetNuggeteer:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: api/getNuggeteer.handler
+      Description: Retrieve a Nuggeteer record by email.
+      Role:
+        'Fn::GetAtt':
+          - DnLambdaExecutionRole
+          - Arn
+      Events:
+        Event1:
+          Type: Api
+          Properties:
+            Path: /get-nuggeteer
+            Method: post
+            RestApiId:
+              Ref: TheDalyNuggetService
+
+  TheDalyNuggetServiceStagingGetNuggeteerLambdaPermission:
+    Type: 'AWS::Lambda::Permission'
+    DependsOn:
+      - TheDalyNuggetServiceStagingGetNuggeteer
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName:
+        Ref: TheDalyNuggetServiceStagingGetNuggeteer
+      Principal: apigateway.amazonaws.com
+
+  TheDalyNuggetServiceStagingGetServerlessOutputs:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: api/getServerlessOutputs.handler
+      Role:
+        'Fn::GetAtt':
+          - DnLambdaExecutionRole
+          - Arn
+      Events:
+        Event1:
+          Type: Api
+          Properties:
+            Path: /get-serverless-outputs
+            Method: get
+            RestApiId:
+              Ref: TheDalyNuggetService
+
+  TheDalyNuggetServiceStagingGetServerlessOutputsLambdaPermission:
+    Type: 'AWS::Lambda::Permission'
+    DependsOn:
+      - TheDalyNuggetServiceStagingGetServerlessOutputs
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName:
+        Ref: TheDalyNuggetServiceStagingGetServerlessOutputs
+      Principal: apigateway.amazonaws.com
+
+  TheDalyNuggetServiceStagingDeleteCognitoUser:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: api/deleteCognitoUser.handler
+      Role:
+        'Fn::GetAtt':
+          - DnLambdaExecutionRole
+          - Arn
+      Events:
+        Event1:
+          Type: Api
+          Properties:
+            Path: /delete-cognito-user
+            Method: post
+            RestApiId:
+              Ref: TheDalyNuggetService
+
+  TheDalyNuggetServiceStagingDeleteCognitoUserLambdaPermission:
+    Type: 'AWS::Lambda::Permission'
+    DependsOn:
+      - TheDalyNuggetServiceStagingDeleteCognitoUser
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName:
+        Ref: TheDalyNuggetServiceStagingDeleteCognitoUser
+      Principal: apigateway.amazonaws.com
+
+  TheDalyNuggetServiceStagingSyncSubscriberTblAndSES:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: api/syncSubscriberTblAndSES.handler
+      Description: >-
+        Event driven by changes in subscriberTbl.  On INSERT adds user to SES
+        and sends verification email.  On Delete, removes user form SES.
+      Role:
+        'Fn::GetAtt':
+          - DnLambdaExecutionRole
+          - Arn
+      Events:
+        Stream:
+          Type: DynamoDB
+          Properties:
+            Stream: !GetAtt NuggetSubscriberDynamoDbTable.StreamArn
+            StartingPosition: TRIM_HORIZON
+            BatchSize: 20
+
+  TheDalyNuggetServiceStagingEmailNuggetOfTheDay:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: api/emailNuggetOfTheDay.handler
+      Description: Event driven by MODIFY on the Nugget Of The Day Table.
+      Role:
+        'Fn::GetAtt':
+          - DnLambdaExecutionRole
+          - Arn
+      Events:
+        Stream:
+          Type: DynamoDB
+          Properties:
+            Stream: !GetAtt NuggetOfTheDayDynamoDbTable.StreamArn
+            StartingPosition: TRIM_HORIZON
+            BatchSize: 20
+
+  TheDalyNuggetServiceStagingRecordNuggetOfTheDay:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: api/recordNuggetOfTheDay.handler
+      Role:
+        'Fn::GetAtt':
+          - DnLambdaExecutionRole
+          - Arn
+      Events:
+        S3Event:
+          Type: S3
+          Properties:
+            Bucket:
+              Ref: TheDailyNuggetEmailBucket
+            Events: s3:ObjectCreated:*
+
+  TheDalyNuggetServiceStagingSyncSubscriberVer:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: api/syncSubscriberVerifications.handler
+      Role:
+        'Fn::GetAtt':
+          - DnLambdaExecutionRole
+          - Arn
+      Events:
+        Ev:
+          Type: Schedule
+          Properties:
+            Schedule: 'cron(0 8,12,17,23 * * ? *)'
+
+  TheDalyNuggetServiceStagingSendNuggetsWeekly:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: api/sendNuggetsWeekly.handler
+      Role:
+        'Fn::GetAtt':
+          - DnLambdaExecutionRole
+          - Arn
+      Events:
+        Event1:
+          Type: Schedule
+          Properties:
+            Schedule: cron(0 8 ? * MON *)
+
+  TheDalyNuggetServiceStagingSendNuggetsTwiceWeekly:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: api/sendNuggetsTwiceWeekly.handler
+      Role:
+        'Fn::GetAtt':
+          - DnLambdaExecutionRole
+          - Arn
+      Events:
+        Ev:
+          Type: Schedule
+          Properties:
+            Schedule: 'cron(0 8 ? * MON,FRI *)'
+
+  TheDalyNuggetServiceStagingSendNuggetsDaily:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: api/sendNuggetsDaily.handler
+      Role:
+        'Fn::GetAtt':
+          - DnLambdaExecutionRole
+          - Arn
+      Events:
+        Event1:
+          Type: Schedule
+          Properties:
+            Schedule: cron(0 8 * * ? *)
+
+  TheDalyNuggetServiceStagingSendNuggetsTwiceDaily:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: api/sendNuggetsTwiceDaily.handler
+      Role:
+        'Fn::GetAtt':
+          - DnLambdaExecutionRole
+          - Arn
+      Events:
+        Ev:
+          Type: Schedule
+          Properties:
+            Schedule: 'cron(0 8,17 * * ? *)'
+
+Outputs:
+  UserPoolId:
+    Value:
+      Ref: CognitoUserPool
+    Export:
+      Name: UserPoolId
+  UserPoolClientId:
+    Value:
+      Ref: CognitoUserPoolClient
+    Export:
+      Name: UserPoolClientId
+  IdentityPoolId:
+    Value:
+      Ref: CognitoIdentityPool
+    Export:
+      Name: IdentityPoolId
+  MyZone:
+    Value: !Ref zonethedailynuggetnet
+    Export:
+      Name:   MyZone
+  MyZoneServers:
+    Value: !Join [',', !GetAtt zonethedailynuggetnet.NameServers]
+    Export:
+      Name:   MyZoneServers
+  RestApiId:
+    Value: !Ref TheDalyNuggetService
+    Export:
+      Name:   RestApiId

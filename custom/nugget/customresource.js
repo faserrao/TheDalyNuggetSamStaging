@@ -1,0 +1,269 @@
+exports.handler = function (event, context, callback) {
+
+  // Install watchdog timer as the first thing
+  setupWatchdogTimer(event, context, callback)
+
+  console.log('REQUEST RECEIVED:\n' + JSON.stringify(event))
+  if (event.RequestType === 'Create') {
+    console.log('CREATE!')
+    // Put your custom create logic here
+
+var params = {
+  FailureRedirectionURL: 'STRING_VALUE', /* required */
+  FromEmailAddress: 'STRING_VALUE', /* required */
+  SuccessRedirectionURL: 'STRING_VALUE', /* required */
+  TemplateContent: 'STRING_VALUE', /* required */
+  TemplateName: 'STRING_VALUE', /* required */
+  TemplateSubject: 'STRING_VALUE' /* required */
+};
+ses.createCustomVerificationEmailTemplate(params, function(err, data) {
+  if (err) console.log(err, err.stack); // an error occurred
+  else     console.log(data);           // successful response
+});
+
+
+    sendResponse(event, context, 'SUCCESS', { 'Message': 'Resource creation successful!' })
+  } else if (event.RequestType === 'Update') {
+    console.log('UDPATE!')
+    // Put your custom update logic here
+
+    var params = {
+      TemplateName: 'STRING_VALUE', /* required */
+      FailureRedirectionURL: 'STRING_VALUE',
+      FromEmailAddress: 'STRING_VALUE',
+      SuccessRedirectionURL: 'STRING_VALUE',
+      TemplateContent: 'STRING_VALUE',
+      TemplateSubject: 'STRING_VALUE'
+    };
+    ses.updateCustomVerificationEmailTemplate(params, function(err, data) {
+      if (err) console.log(err, err.stack); // an error occurred
+      else     console.log(data);           // successful response
+    });
+
+
+    sendResponse(event, context, 'SUCCESS', { 'Message': 'Resource update successful!' })
+  } else if (event.RequestType === 'Delete') {
+    console.log('DELETE!')
+    // Put your custom delete logic here
+
+var params = {
+  TemplateName: 'STRING_VALUE' /* required */
+};
+ses.deleteCustomVerificationEmailTemplate(params, function(err, data) {
+  if (err) console.log(err, err.stack); // an error occurred
+  else     console.log(data);           // successful response
+});
+
+
+    sendResponse(event, context, 'SUCCESS', { 'Message': 'Resource deletion successful!' })
+  } else {
+    console.log('FAILED!')
+    sendResponse(event, context, 'FAILED')
+  }
+}
+
+function setupWatchdogTimer (event, context, callback) {
+  const timeoutHandler = () => {
+    console.log('Timeout FAILURE!')
+    // Emit event to 'sendResponse', then callback with an error from this
+    // function
+    new Promise(() => sendResponse(event, context, 'FAILED'))
+      .then(() => callback(new Error('Function timed out')))
+  }
+
+  // Set timer so it triggers one second before this function would timeout
+  setTimeout(timeoutHandler, context.getRemainingTimeInMillis() - 1000)
+}
+
+// Send response to the pre-signed S3 URL
+function sendResponse (event, context, responseStatus, responseData) {
+  console.log('Sending response ' + responseStatus)
+  var responseBody = JSON.stringify({
+    Status: responseStatus,
+    Reason: 'See the details in CloudWatch Log Stream: ' + context.logStreamName,
+    PhysicalResourceId: context.logStreamName,
+    StackId: event.StackId,
+    RequestId: event.RequestId,
+    LogicalResourceId: event.LogicalResourceId,
+    Data: responseData
+  })
+
+  console.log('RESPONSE BODY:\n', responseBody)
+
+  var https = require('https')
+  var url = require('url')
+
+  var parsedUrl = url.parse(event.ResponseURL)
+  var options = {
+    hostname: parsedUrl.hostname,
+    port: 443,
+    path: parsedUrl.path,
+    method: 'PUT',
+    headers: {
+      'content-type': '',
+      'content-length': responseBody.length
+    }
+  }
+
+  console.log('SENDING RESPONSE...\n')
+
+  var request = https.request(options, function (response) {
+    console.log('STATUS: ' + response.statusCode)
+    console.log('HEADERS: ' + JSON.stringify(response.headers))
+    // Tell AWS Lambda that the function execution is done
+    context.done()
+  })
+
+  request.on('error', function (error) {
+    console.log('sendResponse Error:' + error)
+    // Tell AWS Lambda that the function execution is done
+    context.done()
+  })
+
+  // write data to request body
+  request.write(responseBody)
+  request.end()
+}
+
+
+
+
+var params = {
+  TemplateName: 'STRING_VALUE', /* required */
+  FailureRedirectionURL: 'STRING_VALUE',
+  FromEmailAddress: 'STRING_VALUE',
+  SuccessRedirectionURL: 'STRING_VALUE',
+  TemplateContent: 'STRING_VALUE',
+  TemplateSubject: 'STRING_VALUE'
+};
+ses.updateCustomVerificationEmailTemplate(params, function(err, data) {
+  if (err) console.log(err, err.stack); // an error occurred
+  else     console.log(data);           // successful response
+});
+
+
+
+
+
+var params = {
+  FailureRedirectionURL: 'STRING_VALUE', /* required */
+  FromEmailAddress: 'STRING_VALUE', /* required */
+  SuccessRedirectionURL: 'STRING_VALUE', /* required */
+  TemplateContent: 'STRING_VALUE', /* required */
+  TemplateName: 'STRING_VALUE', /* required */
+  TemplateSubject: 'STRING_VALUE' /* required */
+};
+ses.createCustomVerificationEmailTemplate(params, function(err, data) {
+  if (err) console.log(err, err.stack); // an error occurred
+  else     console.log(data);           // successful response
+});
+
+
+
+/**
+* A sample Lambda function that looks up the latest AMI ID for a given region and architecture.
+**/
+
+// Map instance architectures to an AMI name pattern
+var archToAMINamePattern = {
+  "PV64": "amzn-ami-pv*x86_64-ebs",
+  "HVM64": "amzn-ami-hvm*x86_64-gp2",
+  "HVMG2": "amzn-ami-graphics-hvm*x86_64-ebs*"
+};
+var aws = require("aws-sdk");
+
+exports.handler = function(event, context) {
+
+  console.log("REQUEST RECEIVED:\n" + JSON.stringify(event));
+  
+  // For Delete requests, immediately send a SUCCESS response.
+  if (event.RequestType == "Delete") {
+      sendResponse(event, context, "SUCCESS");
+      return;
+  }
+
+  var responseStatus = "FAILED";
+  var responseData = {};
+
+  var ec2 = new aws.EC2({region: event.ResourceProperties.Region});
+  var describeImagesParams = {
+      Filters: [{ Name: "name", Values: [archToAMINamePattern[event.ResourceProperties.Architecture]]}],
+      Owners: [event.ResourceProperties.Architecture == "HVMG2" ? "679593333241" : "amazon"]
+  };
+
+  // Get AMI IDs with the specified name pattern and owner
+  ec2.describeImages(describeImagesParams, function(err, describeImagesResult) {
+      if (err) {
+          responseData = {Error: "DescribeImages call failed"};
+          console.log(responseData.Error + ":\n", err);
+      }
+      else {
+          var images = describeImagesResult.Images;
+          // Sort images by name in decscending order. The names contain the AMI version, formatted as YYYY.MM.Ver.
+          images.sort(function(x, y) { return y.Name.localeCompare(x.Name); });
+          for (var j = 0; j < images.length; j++) {
+              if (isBeta(images[j].Name)) continue;
+              responseStatus = "SUCCESS";
+              responseData["Id"] = images[j].ImageId;
+              break;
+          }
+      }
+      sendResponse(event, context, responseStatus, responseData);
+  });
+};
+
+// Check if the image is a beta or rc image. The Lambda function won't return any of those images.
+function isBeta(imageName) {
+  return imageName.toLowerCase().indexOf("beta") > -1 || imageName.toLowerCase().indexOf(".rc") > -1;
+}
+
+
+// Send response to the pre-signed S3 URL 
+function sendResponse(event, context, responseStatus, responseData) {
+
+  var responseBody = JSON.stringify({
+      Status: responseStatus,
+      Reason: "See the details in CloudWatch Log Stream: " + context.logStreamName,
+      PhysicalResourceId: context.logStreamName,
+      StackId: event.StackId,
+      RequestId: event.RequestId,
+      LogicalResourceId: event.LogicalResourceId,
+      Data: responseData
+  });
+
+  console.log("RESPONSE BODY:\n", responseBody);
+
+  var https = require("https");
+  var url = require("url");
+
+  var parsedUrl = url.parse(event.ResponseURL);
+  var options = {
+      hostname: parsedUrl.hostname,
+      port: 443,
+      path: parsedUrl.path,
+      method: "PUT",
+      headers: {
+          "content-type": "",
+          "content-length": responseBody.length
+      }
+  };
+
+  console.log("SENDING RESPONSE...\n");
+
+  var request = https.request(options, function(response) {
+      console.log("STATUS: " + response.statusCode);
+      console.log("HEADERS: " + JSON.stringify(response.headers));
+      // Tell AWS Lambda that the function execution is done  
+      context.done();
+  });
+
+  request.on("error", function(error) {
+      console.log("sendResponse Error:" + error);
+      // Tell AWS Lambda that the function execution is done  
+      context.done();
+  });
+
+  // write data to request body
+  request.write(responseBody);
+  request.end();
+}

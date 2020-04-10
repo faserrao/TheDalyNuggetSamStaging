@@ -1,0 +1,383 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Parameters:
+    ServiceName:
+        Type: String
+        Default: the-daly-nugget-sam-service
+        Description: Name for the service, used in the code repository, Lambda function, and pipeline names
+    StackName:
+        Type: String
+        Default: the-daly-nugget-sam-service-staging
+        Description: Name for the service, used in the code repository, Lambda function, and pipeline names
+
+Resources:
+  TheDalyNuggetSamArtifactsBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    Properties:
+      BucketName: !Sub '${StackName}-artifacts'
+      VersioningConfiguration:
+        Status: Enabled
+
+  ArtifactsPolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket:
+        Ref: TheDalyNuggetSamArtifactsBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Action:
+              - s3:GetObject
+            Effect: Allow
+            Principal:
+              Service:
+                - 'serverlessrepo.amazonaws.com'
+            Resource:
+              !Sub '${TheDalyNuggetSamArtifactsBucket.Arn}/*'
+
+  CodeCommitServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: !Sub "Used in CodeCommit project. Created by CloudFormation ${AWS::StackId}"
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Action: 'sts:AssumeRole'
+          Principal:
+            Service: "codecommit.amazonaws.com"
+        Version: '2012-10-17'
+      Policies:
+        - PolicyName: CodeCommitAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource:
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codecommmit/${StackName}-build'
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codecommit/${StackName}-build:*'
+              - Effect: Allow
+                Action:
+                  - 'codecommit:AssociateApprovalRuleTemplateWithRepository'
+                  - 'codecommit:BatchAssociateApprovalRuleTemplateWithRepositories'
+                  - 'codecommit:BatchDisassociateApprovalRuleTemplateFromRepositories'
+                  - 'codecommit:BatchGet*'
+                  - 'codecommit:BatchDescribe*'
+                  - 'codecommit:Get*'
+                  - 'codecommit:List*'
+                  - 'codecommit:Create*'
+                  - 'codecommit:DeleteBranch'
+                  - 'codecommit:DeleteFile'
+                  - 'codecommit:Describe*'
+                  - 'codecommit:DisassociateApprovalRuleTemplateFromRepository'
+                  - 'codecommit:EvaluatePullRequestApprovalRules'
+                  - 'codecommit:OverridePullRequestApprovalRules'
+                  - 'codecommit:Put*'
+                  - 'codecommit:Post*'
+                  - 'codecommit:Merge*'
+                  - 'codecommit:TagResource'
+                  - 'codecommit:Test*'
+                  - 'codecommit:UntagResource'
+                  - 'codecommit:Update*'
+                  - 'codecommit:GitPull'
+                  - 'codecommit:GitPush'
+                Resource: '*'
+
+  CodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: !Sub "Used in CodeBuild project. Created by CloudFormation ${AWS::StackId}"
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Action: 'sts:AssumeRole'
+            Principal:
+              Service: codebuild.amazonaws.com
+        Version: '2012-10-17'
+      Policies:
+        - PolicyName: CodeBuildAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+                  - Effect: Allow
+                    Action:
+                      - 'logs:CreateLogGroup'
+                      - 'logs:CreateLogStream'
+                      - 'logs:PutLogEvents'
+                    Resource:
+                      - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/${StackName}-build'
+                      - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/${StackName}-build:*'
+                  - Effect: Allow
+                    Action:
+                      - 's3:GetObject'
+                      - 's3:GetObjectVersion'
+                      - 's3:PutObject'
+                      - 's3:PutObjectAcl'
+                      - 's3:GetBucketAcl'
+                      - 's3:GetBucketLocation'
+                    Resource:
+                      - !Sub 'arn:aws:s3:::${TheDalyNuggetSamArtifactsBucket}/*'
+                  - Effect: Allow
+                    Action:
+                      - 'codecommit:GitPull'
+                      - 'codebuild:CreateReportGroup'
+                      - 'codebuild:CreateReport'
+                      - 'codebuild:UpdateReport'
+                    Resource:
+                      - !Sub 'arn:aws:codecommit:us-east-1:550659257614:${StackName}-commit'
+                  - Effect: Allow
+                    Action:
+                      - ses:CreateCustomVerificationEmailTemplate
+                      - ses:DeleteCustomVerificationEmailTemplate
+                    Resource:
+                      - '*'
+
+  CloudFormationPipelinePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: CloudFormation Pipeline Execution Policy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'cloudformation:CreateStack'
+              - 'cloudformation:DescribeStacks'
+              - 'cloudformation:DeleteStack'
+              - 'cloudformation:UpdateStack'
+              - 'cloudformation:CreateChangeSet'
+              - 'cloudformation:ExecuteChangeSet'
+              - 'cloudformation:DeleteChangeSet'
+              - 'cloudformation:DescribeChangeSet'
+              - 'cloudformation:SetStackPolicy'
+              - 'cloudformation:SetStackPolicy'
+              - 'cloudformation:ValidateTemplate'
+              - 'codebuild:StartBuild'
+              - 'codebuild:BatchGetBuilds'
+            Resource: "*"
+
+  PipelineServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - "codepipeline.amazonaws.com"
+            Action:
+                - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - !Ref CloudFormationPipelinePolicy
+      Policies:
+        - PolicyName: CanAccessCodeCommit
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - codecommit:GetBranch
+                  - codecommit:GetCommit
+                  - codecommit:UploadArchive
+                  - codecommit:GetUploadArchiveStatus
+                Resource:
+                  - !Sub 'arn:aws:codecommit:${AWS::Region}:${AWS::AccountId}:${StackName}-repository'
+                  - !Sub 'arn:aws:codecommit:${AWS::Region}:${AWS::AccountId}:${StackName}-repository/*'
+        - PolicyName: CanAccessCodeBuild
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'codebuild:BatchGetBuilds'
+                  - 'codebuild:StartBuild'
+                Resource: "*"
+        - PolicyName: PipelineIamAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "iam:PassRole"
+                Resource: '*'
+        - PolicyName: CanAccessS3
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:GetBucketVersioning
+                  - s3:PutObject
+                  - s3:GetBucketPolicy
+                  - s3:GetObjectAcl
+                  - s3:PutObjectAcl
+                  - s3:DeleteObject
+                Resource:
+                  - !GetAtt TheDalyNuggetSamArtifactsBucket.Arn
+                  - !Sub ${TheDalyNuggetSamArtifactsBucket.Arn}/*
+        - PolicyName: CanAccessSES
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ses:CreateCustomVerificationEmailTemplate
+                  - ses:DeleteCustomVerificationEmailTemplate
+                Resource:
+                  - '*'
+
+  CloudFormationExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          Action:
+            - 'sts:AssumeRole'
+          Effect: Allow
+          Principal:
+            Service:
+              - cloudformation.amazonaws.com
+      Path: /
+      ManagedPolicyArns:
+        - !Ref CloudFormationPipelinePolicy
+        - 'arn:aws:iam::aws:policy/AdministratorAccess'
+      Policies:
+        - PolicyName: CanAccessLambda
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'iam:PassRole'
+                  - 'lambda:InvokeFunction'
+                  - 'lambda:ListFunctions'
+                  - 'lambda:InvokeAsyc'
+                Resource: '*'
+        - PolicyName: CanDeployChangeSet
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'cloudformation:DescribeStacks'
+                  - 'cloudformation:CreateChangeSet'
+                  - 'cloudformation:ExecuteChangeSet'
+                  - 'cloudformation:DescribeChangeSet'
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${StackName}/*'
+        - PolicyName: CfnIamAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "iam:PassRole"
+                Resource: '*'
+#                Resource:
+#                    - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${DeployRoleName}%%%%%%
+
+  CodeRepository:
+    Type: AWS::CodeCommit::Repository
+    Properties:
+      RepositoryName: !Sub '${StackName}-repository'
+      RepositoryDescription: !Sub 'Repository for the ${StackName} service'
+
+  BuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub '${StackName}-build'
+      Description: Build project for the Lambda service
+      Artifacts:
+        Type: NO_ARTIFACTS
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: 'aws/codebuild/standard:2.0'
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+      Source:
+        Type: CODECOMMIT
+        Location:
+          Fn::Join:
+            - ""
+            - - "https://git-codecommit."
+              - Ref: AWS::Region
+              - ".amazonaws.com/v1/repos/"
+              - !GetAtt CodeRepository.Name
+
+  Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      ArtifactStore:
+        Location: !Ref TheDalyNuggetSamArtifactsBucket
+        Type: S3
+      Name: !Sub ${StackName}-pipeline
+      RoleArn: !GetAtt PipelineServiceRole.Arn
+      Stages:
+        - Name: Source
+          Actions:
+          - Name: CodeCommitRepository
+            ActionTypeId:
+              Category: Source
+              Owner: AWS
+              Provider: CodeCommit
+              Version: "1"
+            Configuration:
+              RepositoryName: !Sub '${StackName}-repository'
+              BranchName: master
+            OutputArtifacts:
+              - Name: SourceArtifact
+        - Name: Build
+          Actions:
+          - Name: Build
+            ActionTypeId:
+              Category: Build
+              Owner: AWS
+              Provider: CodeBuild
+              Version: "1"
+            Configuration:
+              ProjectName: !Ref BuildProject
+            InputArtifacts:
+              - Name: SourceArtifact
+            OutputArtifacts:
+              - Name: BuildArtifact
+        - Name: Deploy
+          Actions:
+          - Name: CreateChangeSet
+            ActionTypeId:
+              Category: Deploy
+              Owner: AWS
+              Provider: CloudFormation
+              Version: "1"
+            Configuration:
+              ActionMode: CHANGE_SET_REPLACE
+              RoleArn: !GetAtt CloudFormationExecutionRole.Arn
+              StackName: !Sub '${StackName}'
+              ChangeSetName: !Sub '${StackName}-change-set'
+              TemplatePath: BuildArtifact::the-daly-nugget-sam-service-staging-template-export.yml
+              Capabilities: CAPABILITY_IAM
+            InputArtifacts:
+              - Name: BuildArtifact
+        - Name: Execute
+          Actions:
+          - Name: Execute
+            ActionTypeId:
+              Category: Deploy
+              Owner: AWS
+              Provider: CloudFormation
+              Version: "1"
+            Configuration:
+              ActionMode: CHANGE_SET_EXECUTE
+              RoleArn: !GetAtt CloudFormationExecutionRole.Arn
+              StackName: !Sub '${StackName}'
+              ChangeSetName: !Sub '${StackName}-change-set'
